@@ -112,6 +112,9 @@ Add `--monitor` while testing driven sounds. It prints one line per second with
 input/output RMS, peak dBFS, near-clip counts, hard-clip counts, and stream
 xruns. If `output peak` approaches `0.0 dBFS` or `output near/clip` is non-zero,
 lower `--output-db` before changing the amp model.
+Use `--input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav`
+to loop the dry guitar test file through the standalone instead of the live
+input device.
 
 Ready-made IR presets:
 
@@ -122,6 +125,7 @@ make standalone-with-ir-crunch
 make standalone-with-ir-driven
 make standalone-jcm800
 make standalone-jcm800-driven
+make standalone-jcm800-file
 ```
 
 All preset values remain overridable, for example:

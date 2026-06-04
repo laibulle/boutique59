@@ -3,8 +3,9 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, Device, SampleFormat, SampleRate, StreamConfig, SupportedStreamConfigRange,
 };
-use rtrb::RingBuffer;
+use rtrb::{Consumer, RingBuffer};
 use std::env;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU32, AtomicU64, Ordering},
     Arc,
@@ -153,9 +154,46 @@ fn dbfs(level: f32) -> f32 {
     }
 }
 
+struct WavInput {
+    path: PathBuf,
+    samples: Vec<f32>,
+    channels: usize,
+    sample_rate: u32,
+}
+
+enum RuntimeInput {
+    Live(Consumer<f32>),
+    Wav { samples: Vec<f32>, position: usize },
+}
+
+impl RuntimeInput {
+    fn next_sample(&mut self, monitoring: &MonitorStats, monitor: bool) -> f32 {
+        match self {
+            Self::Live(consumer) => match consumer.pop() {
+                Ok(sample) => sample,
+                Err(_) => {
+                    if monitor {
+                        monitoring.record_output_underrun();
+                    }
+                    0.0
+                }
+            },
+            Self::Wav { samples, position } => {
+                let sample = samples[*position];
+                *position = (*position + 1) % samples.len();
+                if monitor {
+                    monitoring.record_input(sample);
+                }
+                sample
+            }
+        }
+    }
+}
+
 struct Args {
-    input_device: String,
+    input_device: Option<String>,
     output_device: String,
+    input_wav: Option<PathBuf>,
     input_channel: usize,
     output_channels: Vec<usize>,
     sample_rate: u32,
@@ -169,35 +207,71 @@ struct Args {
     model: String,
 }
 
+fn load_wav_input(path: &Path, input_channel: usize) -> Result<WavInput> {
+    let mut reader = hound::WavReader::open(path)
+        .with_context(|| format!("could not open input WAV '{}'", path.display()))?;
+    let spec = reader.spec();
+    let channels = spec.channels as usize;
+    if input_channel >= channels {
+        bail!(
+            "input channel {} is unavailable; '{}' has {} channel(s)",
+            input_channel + 1,
+            path.display(),
+            channels
+        );
+    }
+
+    let mut samples = Vec::new();
+    match spec.sample_format {
+        hound::SampleFormat::Float => {
+            for (index, sample) in reader.samples::<f32>().enumerate() {
+                let sample = sample.with_context(|| {
+                    format!("could not read float sample from '{}'", path.display())
+                })?;
+                if index % channels == input_channel {
+                    samples.push(sample);
+                }
+            }
+        }
+        hound::SampleFormat::Int => {
+            let scale = 2.0_f32.powi(spec.bits_per_sample as i32 - 1);
+            for (index, sample) in reader.samples::<i32>().enumerate() {
+                let sample = sample.with_context(|| {
+                    format!("could not read int sample from '{}'", path.display())
+                })? as f32
+                    / scale;
+                if index % channels == input_channel {
+                    samples.push(sample);
+                }
+            }
+        }
+    }
+
+    if samples.is_empty() {
+        bail!("input WAV '{}' contains no samples", path.display());
+    }
+
+    Ok(WavInput {
+        path: path.to_path_buf(),
+        samples,
+        channels,
+        sample_rate: spec.sample_rate,
+    })
+}
+
 fn main() -> Result<()> {
     let host = cpal::default_host();
     let args = parse_args(&host)?;
-    let input_device = find_device(host.input_devices()?, &args.input_device, "input")?;
     let output_device = find_device(host.output_devices()?, &args.output_device, "output")?;
 
-    let input_range = select_config(
-        input_device.supported_input_configs()?,
-        args.sample_rate,
-        args.period_size,
-        "input",
-    )?;
     let output_range = select_config(
         output_device.supported_output_configs()?,
         args.sample_rate,
         args.period_size,
         "output",
     )?;
-    let input_channels = input_range.channels() as usize;
     let output_channels = output_range.channels() as usize;
 
-    if args.input_channel >= input_channels {
-        bail!(
-            "input channel {} is unavailable; '{}' exposes {} input channels",
-            args.input_channel + 1,
-            args.input_device,
-            input_channels
-        );
-    }
     if let Some(channel) = args
         .output_channels
         .iter()
@@ -211,30 +285,88 @@ fn main() -> Result<()> {
         );
     }
 
-    let input_config = stream_config(&input_range, args.sample_rate, args.period_size);
     let output_config = stream_config(&output_range, args.sample_rate, args.period_size);
-    let (mut producer, mut consumer) = RingBuffer::<f32>::new(args.period_size as usize * 8);
-    let input_channel = args.input_channel;
-
     let monitoring = Arc::new(MonitorStats::default());
-    let monitoring_input = monitoring.clone();
-    let input_stream = input_device.build_input_stream(
-        &input_config,
-        move |data: &[f32], _| {
-            for frame in data.chunks_exact(input_channels) {
-                let sample = frame[input_channel];
-                if args.monitor {
-                    monitoring_input.record_input(sample);
-                }
-                if producer.push(sample).is_err() && args.monitor {
-                    monitoring_input.record_input_overrun();
-                }
-            }
-        },
-        |error| eprintln!("input stream error: {error}"),
-        None,
-    )?;
 
+    let (input_stream, input_description, input_channels, mut input_source) =
+        if let Some(path) = &args.input_wav {
+            let wav = load_wav_input(path, args.input_channel)?;
+            if wav.sample_rate != args.sample_rate {
+                bail!(
+                    "input WAV '{}' is {} Hz, but --sample-rate is {}; use a matching sample rate",
+                    wav.path.display(),
+                    wav.sample_rate,
+                    args.sample_rate
+                );
+            }
+            let description = format!(
+                "WAV '{}' channel {}",
+                wav.path.display(),
+                args.input_channel + 1
+            );
+            (
+                None,
+                description,
+                wav.channels,
+                RuntimeInput::Wav {
+                    samples: wav.samples,
+                    position: 0,
+                },
+            )
+        } else {
+            let input_device_name = args
+                .input_device
+                .as_ref()
+                .context("missing --device, --input-device, or --input-wav")?;
+            let input_device = find_device(host.input_devices()?, input_device_name, "input")?;
+            let input_range = select_config(
+                input_device.supported_input_configs()?,
+                args.sample_rate,
+                args.period_size,
+                "input",
+            )?;
+            let input_channels = input_range.channels() as usize;
+            if args.input_channel >= input_channels {
+                bail!(
+                    "input channel {} is unavailable; '{}' exposes {} input channels",
+                    args.input_channel + 1,
+                    input_device_name,
+                    input_channels
+                );
+            }
+            let input_config = stream_config(&input_range, args.sample_rate, args.period_size);
+            let (mut producer, consumer) = RingBuffer::<f32>::new(args.period_size as usize * 8);
+            let input_channel = args.input_channel;
+            let monitor_enabled = args.monitor;
+            let monitoring_input = monitoring.clone();
+            let input_stream = input_device.build_input_stream(
+                &input_config,
+                move |data: &[f32], _| {
+                    for frame in data.chunks_exact(input_channels) {
+                        let sample = frame[input_channel];
+                        if monitor_enabled {
+                            monitoring_input.record_input(sample);
+                        }
+                        if producer.push(sample).is_err() && monitor_enabled {
+                            monitoring_input.record_input_overrun();
+                        }
+                    }
+                },
+                |error| eprintln!("input stream error: {error}"),
+                None,
+            )?;
+            (
+                Some(input_stream),
+                format!(
+                    "device '{input_device_name}' channel {}",
+                    args.input_channel + 1
+                ),
+                input_channels,
+                RuntimeInput::Live(consumer),
+            )
+        };
+
+    let monitor_enabled = args.monitor;
     let controls = args.controls;
     let input_gain = args.input_gain;
     let mut amp = VoxAmp::with_model(args.sample_rate as f32, &args.model);
@@ -243,26 +375,19 @@ fn main() -> Result<()> {
         .then(|| SpeakerStage::from_embedded_ir(args.sample_rate))
         .transpose()?;
     let ir_enabled = speaker.is_some();
-    let selected_outputs = args.output_channels;
+    let selected_outputs = args.output_channels.clone();
     let monitoring_output = monitoring.clone();
     let output_stream = output_device.build_output_stream(
         &output_config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_exact_mut(output_channels) {
-                let input = match consumer.pop() {
-                    Ok(sample) => sample,
-                    Err(_) => {
-                        if args.monitor {
-                            monitoring_output.record_output_underrun();
-                        }
-                        0.0
-                    }
-                } * input_gain;
+                let input =
+                    input_source.next_sample(&monitoring_output, monitor_enabled) * input_gain;
                 let amp_output = amp.process(input, controls);
                 let output = speaker
                     .as_mut()
                     .map_or(amp_output, |speaker| speaker.process(amp_output, true));
-                if args.monitor {
+                if monitor_enabled {
                     monitoring_output.record_output(output);
                 }
                 frame.fill(0.0);
@@ -276,7 +401,9 @@ fn main() -> Result<()> {
     )?;
 
     output_stream.play()?;
-    input_stream.play()?;
+    if let Some(input_stream) = &input_stream {
+        input_stream.play()?;
+    }
     if args.monitor {
         let monitor = monitoring.clone();
         std::thread::spawn(move || loop {
@@ -307,6 +434,7 @@ fn main() -> Result<()> {
         "VoxBox running: {} input channels, {} output channels, {} Hz, {} samples",
         input_channels, output_channels, args.sample_rate, args.period_size
     );
+    eprintln!("Input source: {input_description}");
     eprintln!(
         "Speaker IR: {}",
         if ir_enabled { "enabled" } else { "disabled" }
@@ -331,6 +459,7 @@ fn main() -> Result<()> {
 fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut input_device = None;
     let mut output_device = None;
+    let mut input_wav = None;
     let mut input_channel = 1;
     let mut output_channels = "1,2".to_owned();
     let mut sample_rate = 48_000;
@@ -358,6 +487,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             }
             "--input-device" => input_device = Some(next_value(&mut args, "--input-device")?),
             "--output-device" => output_device = Some(next_value(&mut args, "--output-device")?),
+            "--input-wav" => input_wav = Some(PathBuf::from(next_value(&mut args, "--input-wav")?)),
             "--input-channel" => {
                 input_channel = next_value(&mut args, "--input-channel")?.parse()?
             }
@@ -481,8 +611,9 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     }
 
     Ok(Args {
-        input_device: input_device.context("missing --device or --input-device")?,
+        input_device,
         output_device: output_device.context("missing --device or --output-device")?,
+        input_wav,
         input_channel: input_channel - 1,
         output_channels: output_channels.into_iter().map(|ch| ch - 1).collect(),
         sample_rate,
@@ -590,6 +721,7 @@ fn print_help() {
          \x20 --device NAME             Use the same input and output device\n\
          \x20 --input-device NAME       Input device name\n\
          \x20 --output-device NAME      Output device name\n\
+         \x20 --input-wav PATH          Loop a mono/stereo WAV file instead of live input\n\
          \x20 --input-channel N         One-based guitar input [default: 1]\n\
          \x20 --output-channels N,N     One-based monitor outputs [default: 1,2]\n\
          \x20 --sample-rate HZ          Sample rate [default: 48000]\n\
@@ -621,5 +753,17 @@ mod tests {
 
         let mut negative = ["-0.1".to_owned()].into_iter();
         assert!(parse_pot(&mut negative, "--cut").is_err());
+    }
+
+    #[test]
+    fn loads_sample_wav_input_channel() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav");
+        let wav = load_wav_input(&path, 0).unwrap();
+
+        assert_eq!(wav.sample_rate, 44_100);
+        assert_eq!(wav.channels, 2);
+        assert!(!wav.samples.is_empty());
+        assert!(wav.samples.iter().all(|sample| sample.is_finite()));
     }
 }

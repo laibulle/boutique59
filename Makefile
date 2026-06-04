@@ -1,4 +1,5 @@
-DEVICE ?= Scarlett 18i8 USB
+#DEVICE ?= Scarlett 18i8 USB
+DEVICE ?= Écouteurs externes
 INPUT_CHANNEL ?= 1
 OUTPUT_CHANNELS ?= 1,2
 SAMPLE_RATE ?= 48000
@@ -9,6 +10,7 @@ TREBLE ?= 6.0
 CUT ?= 3.5
 INPUT_DB ?= 0
 OUTPUT_DB ?= -18
+TEST_INPUT_WAV ?= samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav
 CLI := target/release/voxbox-cli
 DESKTOP :=target/release/voxbox-desktop
 
@@ -104,6 +106,14 @@ standalone-jcm800-driven: build
 		--preset jcm800-driven --ir --monitor \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
+standalone-jcm800-file: SAMPLE_RATE=44100
+standalone-jcm800-file: build
+	$(CLI) --output-device '$(DEVICE)' \
+		--input-wav '$(TEST_INPUT_WAV)' --output-channels $(OUTPUT_CHANNELS) \
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--preset jcm800-driven --ir --monitor \
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
+
 devices: build
 	$(CLI) --list-devices
 
@@ -119,4 +129,4 @@ desktop-release:
 run-desktop: desktop-release
 	$(DESKTOP)
 
-.PHONY: standalone-dumble standalone-dumble-ir standalone-jcm800 standalone-jcm800-driven
+.PHONY: standalone-dumble standalone-dumble-ir standalone-jcm800 standalone-jcm800-driven standalone-jcm800-file

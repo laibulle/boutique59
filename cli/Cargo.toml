@@ -8,6 +8,7 @@ license = "MIT"
 voxbox = { path = "../core" }
 anyhow = "1.0"
 cpal = "0.15"
+hound = "3.5"
 rtrb = "0.2"
 
 [features]

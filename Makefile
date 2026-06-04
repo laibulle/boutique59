@@ -92,6 +92,14 @@ standalone-dumble-driven: build
 		--preset dumble-driven --ir \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
+standalone-dumble-driven-file: SAMPLE_RATE=44100
+standalone-dumble-driven-file: build
+	$(CLI) --output-device '$(DEVICE)' \
+		--input-wav '$(TEST_INPUT_WAV)' --output-channels $(OUTPUT_CHANNELS) \
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--preset dumble-driven --ir --monitor \
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
+
 standalone-jcm800: build
 	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \

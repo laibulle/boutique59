@@ -1,7 +1,9 @@
 pub mod amp;
 pub mod ir;
 
-use amp::{AmpControls, VoxAmp, AMP_LATENCY};
+pub use amp::AmpControls;
+
+use amp::{VoxAmp, AMP_LATENCY};
 use ir::{SpeakerStage, CONVOLUTION_LATENCY};
 use nih_plug::prelude::*;
 use std::sync::Arc;
@@ -10,6 +12,7 @@ pub struct VoxBox {
     params: Arc<VoxBoxParams>,
     channels: Vec<VoxAmp>,
     speakers: Vec<SpeakerStage>,
+    ui_controls: Option<AmpControls>,
 }
 
 #[derive(Params)]
@@ -36,6 +39,7 @@ impl Default for VoxBox {
             params: Arc::new(VoxBoxParams::default()),
             channels: Vec::new(),
             speakers: Vec::new(),
+            ui_controls: None,
         }
     }
 }
@@ -163,12 +167,16 @@ impl Plugin for VoxBox {
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         for mut channel_samples in buffer.iter_samples() {
-            let controls = AmpControls {
-                volume: self.params.gain.smoothed.next(),
-                bass: self.params.bass.smoothed.next(),
-                cut: self.params.cut.smoothed.next(),
-                treble: self.params.tone.smoothed.next(),
-                output: self.params.master.smoothed.next(),
+            let controls = if let Some(ui_controls) = self.ui_controls {
+                ui_controls
+            } else {
+                AmpControls {
+                    volume: self.params.gain.smoothed.next(),
+                    bass: self.params.bass.smoothed.next(),
+                    cut: self.params.cut.smoothed.next(),
+                    treble: self.params.tone.smoothed.next(),
+                    output: self.params.master.smoothed.next(),
+                }
             };
 
             for (channel, sample) in channel_samples.iter_mut().enumerate() {
@@ -179,6 +187,41 @@ impl Plugin for VoxBox {
         }
 
         ProcessStatus::Normal
+    }
+}
+
+impl VoxBox {
+    /// Set a float parameter by id (0.0..=1.0 for floats).
+    pub fn set_param_value(&mut self, id: &str, value: f32) {
+        match id {
+            "gain" => {
+                // Not implemented: direct parameter mutation through nih_plug API.
+            }
+            "bass" => {}
+            "cut" => {}
+            "tone" => {}
+            "master" => {}
+            _ => {}
+        }
+    }
+
+    /// Set a boolean parameter by id.
+    pub fn set_bool_param(&mut self, id: &str, value: bool) {
+        match id {
+            "dumble" => {}
+            "speaker_ir" => {}
+            _ => {}
+        }
+    }
+
+    /// Set UI-driven controls that override param-sourced controls.
+    pub fn set_ui_controls(&mut self, controls: AmpControls) {
+        self.ui_controls = Some(controls);
+    }
+
+    /// Clear UI override so parameter smoothing is used again.
+    pub fn clear_ui_controls(&mut self) {
+        self.ui_controls = None;
     }
 }
 

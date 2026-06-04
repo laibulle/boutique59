@@ -24,6 +24,7 @@ struct Args {
     output_db: f32,
     ir: bool,
     monitor: bool,
+    dumble_model: bool,
 }
 
 fn main() -> Result<()> {
@@ -94,7 +95,11 @@ fn main() -> Result<()> {
 
     let controls = args.controls;
     let input_gain = args.input_gain;
-    let mut amp = VoxAmp::new(args.sample_rate as f32);
+    let mut amp = if args.dumble_model {
+        VoxAmp::with_model(args.sample_rate as f32, "dumble")
+    } else {
+        VoxAmp::new(args.sample_rate as f32)
+    };
     let mut speaker = args
         .ir
         .then(|| SpeakerStage::from_embedded_ir(args.sample_rate))
@@ -180,6 +185,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut output_db = -9.0;
     let mut ir = false;
     let mut monitor = false;
+    let mut dumble_model = false;
     let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -204,6 +210,21 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--input-db" => input_db = next_value(&mut args, "--input-db")?.parse()?,
             "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse()?,
             "--ir" => ir = true,
+            "--preset" => {
+                let name = next_value(&mut args, "--preset")?.to_lowercase();
+                match name.as_str() {
+                    "dumble" => {
+                        // Dumble Overdrive Special preset values (approximate)
+                        volume = 6.5;
+                        bass = 5.5;
+                        treble = 6.0;
+                        cut = 3.8;
+                        output_db = -12.0;
+                        dumble_model = true;
+                    }
+                    _ => bail!("unknown preset '{name}'"),
+                }
+            }
             "--monitor" => monitor = true,
             "--list-devices" => {
                 print_devices(host)?;
@@ -259,6 +280,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         output_db,
         ir,
         monitor,
+        dumble_model,
     })
 }
 

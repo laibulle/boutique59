@@ -60,6 +60,21 @@ standalone-with-ir-driven: CUT=5.2
 standalone-with-ir-driven: OUTPUT_DB=-17
 standalone-with-ir-driven: standalone-with-ir
 
+.PHONY: standalone-dumble standalone-dumble-ir
+standalone-dumble: build
+	$(CLI) --device '$(DEVICE)' \
+		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--preset dumble \
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
+
+standalone-dumble-ir: build
+	$(CLI) --device '$(DEVICE)' \
+		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--preset dumble --ir \
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
+
 devices: build
 	$(CLI) --list-devices
 

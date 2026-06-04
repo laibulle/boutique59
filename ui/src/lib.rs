@@ -1,4 +1,6 @@
-use iced::widget::{button, checkbox, column, container, pick_list, progress_bar, row, slider, text};
+use iced::widget::{
+    button, checkbox, column, container, pick_list, progress_bar, row, slider, text,
+};
 use iced::{Alignment, Background, Color, Element, Length, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +61,6 @@ impl progress_bar::StyleSheet for SkeuoProgressBar {
 fn skeuo_container(background: Color) -> iced::theme::Container {
     iced::theme::Container::Custom(Box::new(SkeuoContainer(background)))
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -218,12 +219,9 @@ impl VoxBoxUi {
             .padding(6);
 
         container(
-            column![
-                indicator,
-                text(label).size(12),
-            ]
-            .spacing(6)
-            .align_items(Alignment::Center),
+            column![indicator, text(label).size(12),]
+                .spacing(6)
+                .align_items(Alignment::Center),
         )
         .style(skeuo_container(Color::from_rgb(0.24, 0.20, 0.16)))
         .padding(8)
@@ -233,8 +231,15 @@ impl VoxBoxUi {
 
     fn render_toggle_visual(&self, on: bool) -> Element<'_, Message> {
         // Stomp switch visual: LED + label block
-        let led_color = if on { Color::from_rgb(0.14, 0.92, 0.38) } else { Color::from_rgb(0.6, 0.06, 0.06) };
-        let led = container(text(" ")).width(Length::Fixed(12.0)).height(Length::Fixed(12.0)).style(skeuo_container(led_color));
+        let led_color = if on {
+            Color::from_rgb(0.14, 0.92, 0.38)
+        } else {
+            Color::from_rgb(0.6, 0.06, 0.06)
+        };
+        let led = container(text(" "))
+            .width(Length::Fixed(12.0))
+            .height(Length::Fixed(12.0))
+            .style(skeuo_container(led_color));
         container(row![led])
             .style(skeuo_container(Color::from_rgb(0.10, 0.09, 0.08)))
             .padding(4)

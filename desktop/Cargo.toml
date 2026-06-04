@@ -8,3 +8,4 @@ description = "Desktop frontend for VoxBox using iced."
 [dependencies]
 iced = { version = "0.10", features = ["canvas"] }
 voxbox-ui = { path = "../ui" }
+voxbox = { path = "../core" }

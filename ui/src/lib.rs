@@ -388,12 +388,14 @@ impl VoxBoxUi {
                     button(
                         column![
                             row![
-                                container(text(match device.kind {
-                                    DeviceKind::Amp => "HEAD",
-                                    DeviceKind::Pedal => "PEDAL",
-                                })
-                                .size(10)
-                                .horizontal_alignment(iced::alignment::Horizontal::Center))
+                                container(
+                                    text(match device.kind {
+                                        DeviceKind::Amp => "HEAD",
+                                        DeviceKind::Pedal => "PEDAL",
+                                    })
+                                    .size(10)
+                                    .horizontal_alignment(iced::alignment::Horizontal::Center)
+                                )
                                 .padding(6)
                                 .style(skeuo_container(label_color)),
                                 text(&device.name)
@@ -403,8 +405,12 @@ impl VoxBoxUi {
                             ]
                             .spacing(10)
                             .align_items(Alignment::Center),
-                            text(if device.bypassed { "bypassed" } else { "active" })
-                                .size(12),
+                            text(if device.bypassed {
+                                "bypassed"
+                            } else {
+                                "active"
+                            })
+                            .size(12),
                         ]
                         .spacing(6),
                     )

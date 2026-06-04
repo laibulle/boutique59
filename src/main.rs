@@ -167,6 +167,12 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     if input_channel == 0 {
         bail!("--input-channel is one-based and must be at least 1");
     }
+    if sample_rate == 0 {
+        bail!("--sample-rate must be greater than zero");
+    }
+    if period_size == 0 {
+        bail!("--period-size must be greater than zero");
+    }
     let output_channels = output_channels
         .split(',')
         .map(|value| value.trim().parse::<usize>())

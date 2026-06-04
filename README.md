@@ -47,10 +47,22 @@ target/release/voxbox-standalone \
   --period-size 256
 ```
 
-`make standalone` runs that Scarlett configuration. If CoreAudio rejects it,
-use the interface's configured sample rate (`44100`, `48000`, or `96000`) and
-try period sizes such as `128`, `256`, or `512`. `44000` is not a standard
-Scarlett sample rate. Headphones are strongly recommended while testing.
+`make standalone` runs that Scarlett configuration at 48 kHz. Override the
+configuration with Make variables:
+
+```sh
+make standalone SAMPLE_RATE=44100 PERIOD_SIZE=128
+make standalone-with-ir SAMPLE_RATE=96000
+```
+
+Available variables are `DEVICE`, `INPUT_CHANNEL`, `OUTPUT_CHANNELS`,
+`SAMPLE_RATE`, and `PERIOD_SIZE`. The CLAP/VST3 plugin always uses the sample
+rate selected by its host.
+
+If CoreAudio rejects a configuration, use an interface-supported sample rate
+such as `44100`, `48000`, or `96000` and try period sizes such as `128`, `256`,
+or `512`. `44000` is not a standard Scarlett sample rate. Headphones are
+strongly recommended while testing.
 
 The speaker IR is optional and disabled by default. Enable the embedded,
 sample-rate-matched 200 ms Celestion Vintage 30 IR with:

@@ -108,6 +108,10 @@ trim after the modeled amp because the original AC30 has no master volume.
 
 Set the Scarlett to instrument mode and adjust its hardware gain so normal hard
 playing peaks around `-18` to `-12 dBFS`. Then adjust `INPUT_DB` if needed.
+Add `--monitor` while testing driven sounds. It prints one line per second with
+input/output RMS, peak dBFS, near-clip counts, hard-clip counts, and stream
+xruns. If `output peak` approaches `0.0 dBFS` or `output near/clip` is non-zero,
+lower `--output-db` before changing the amp model.
 
 Ready-made IR presets:
 

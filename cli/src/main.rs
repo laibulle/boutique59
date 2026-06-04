@@ -5,11 +5,153 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU32, AtomicU64, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::Duration;
 use voxbox::amp::{AmpControls, VoxAmp};
 use voxbox::ir::SpeakerStage;
+
+const RMS_SCALE: f64 = 1_000_000_000.0;
+const NEAR_CLIP_LEVEL: f32 = 0.98;
+const CLIP_LEVEL: f32 = 1.0;
+
+#[derive(Default)]
+struct MonitorStats {
+    input_sum_squares: AtomicU64,
+    output_sum_squares: AtomicU64,
+    input_count: AtomicU64,
+    output_count: AtomicU64,
+    input_peak_bits: AtomicU32,
+    output_peak_bits: AtomicU32,
+    input_near_clips: AtomicU64,
+    output_near_clips: AtomicU64,
+    input_clips: AtomicU64,
+    output_clips: AtomicU64,
+    input_overruns: AtomicU64,
+    output_underruns: AtomicU64,
+}
+
+#[derive(Default)]
+struct MonitorSnapshot {
+    input_sum_squares: u64,
+    output_sum_squares: u64,
+    input_count: u64,
+    output_count: u64,
+    input_peak: f32,
+    output_peak: f32,
+    input_near_clips: u64,
+    output_near_clips: u64,
+    input_clips: u64,
+    output_clips: u64,
+    input_overruns: u64,
+    output_underruns: u64,
+}
+
+impl MonitorStats {
+    fn record_input(&self, sample: f32) {
+        self.record_sample(
+            sample,
+            &self.input_sum_squares,
+            &self.input_count,
+            &self.input_peak_bits,
+            &self.input_near_clips,
+            &self.input_clips,
+        );
+    }
+
+    fn record_output(&self, sample: f32) {
+        self.record_sample(
+            sample,
+            &self.output_sum_squares,
+            &self.output_count,
+            &self.output_peak_bits,
+            &self.output_near_clips,
+            &self.output_clips,
+        );
+    }
+
+    fn record_input_overrun(&self) {
+        self.input_overruns.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_output_underrun(&self) {
+        self.output_underruns.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn snapshot_and_reset(&self) -> MonitorSnapshot {
+        MonitorSnapshot {
+            input_sum_squares: self.input_sum_squares.swap(0, Ordering::Relaxed),
+            output_sum_squares: self.output_sum_squares.swap(0, Ordering::Relaxed),
+            input_count: self.input_count.swap(0, Ordering::Relaxed),
+            output_count: self.output_count.swap(0, Ordering::Relaxed),
+            input_peak: f32::from_bits(self.input_peak_bits.swap(0, Ordering::Relaxed)),
+            output_peak: f32::from_bits(self.output_peak_bits.swap(0, Ordering::Relaxed)),
+            input_near_clips: self.input_near_clips.swap(0, Ordering::Relaxed),
+            output_near_clips: self.output_near_clips.swap(0, Ordering::Relaxed),
+            input_clips: self.input_clips.swap(0, Ordering::Relaxed),
+            output_clips: self.output_clips.swap(0, Ordering::Relaxed),
+            input_overruns: self.input_overruns.swap(0, Ordering::Relaxed),
+            output_underruns: self.output_underruns.swap(0, Ordering::Relaxed),
+        }
+    }
+
+    fn record_sample(
+        &self,
+        sample: f32,
+        sum_squares: &AtomicU64,
+        count: &AtomicU64,
+        peak_bits: &AtomicU32,
+        near_clips: &AtomicU64,
+        clips: &AtomicU64,
+    ) {
+        let magnitude = sample.abs();
+        let square = (magnitude as f64 * magnitude as f64 * RMS_SCALE).round() as u64;
+        sum_squares.fetch_add(square, Ordering::Relaxed);
+        count.fetch_add(1, Ordering::Relaxed);
+        update_peak(peak_bits, magnitude);
+        if magnitude >= NEAR_CLIP_LEVEL {
+            near_clips.fetch_add(1, Ordering::Relaxed);
+        }
+        if magnitude >= CLIP_LEVEL {
+            clips.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+fn update_peak(peak_bits: &AtomicU32, magnitude: f32) {
+    let magnitude_bits = magnitude.to_bits();
+    let mut current = peak_bits.load(Ordering::Relaxed);
+    while magnitude_bits > current {
+        match peak_bits.compare_exchange_weak(
+            current,
+            magnitude_bits,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break,
+            Err(value) => current = value,
+        }
+    }
+}
+
+fn rms_from_scaled(sum_squares: u64, count: u64) -> f32 {
+    if count == 0 {
+        0.0
+    } else {
+        (sum_squares as f64 / RMS_SCALE / count as f64).sqrt() as f32
+    }
+}
+
+fn dbfs(level: f32) -> f32 {
+    if level > 0.0 {
+        20.0 * level.log10()
+    } else {
+        f32::NEG_INFINITY
+    }
+}
 
 struct Args {
     input_device: String,
@@ -74,18 +216,18 @@ fn main() -> Result<()> {
     let (mut producer, mut consumer) = RingBuffer::<f32>::new(args.period_size as usize * 8);
     let input_channel = args.input_channel;
 
-    let monitoring = Arc::new(Mutex::new((0f64, 0f64, 0u64)));
+    let monitoring = Arc::new(MonitorStats::default());
     let monitoring_input = monitoring.clone();
     let input_stream = input_device.build_input_stream(
         &input_config,
         move |data: &[f32], _| {
             for frame in data.chunks_exact(input_channels) {
                 let sample = frame[input_channel];
-                let _ = producer.push(sample);
                 if args.monitor {
-                    let mut stats = monitoring_input.lock().unwrap();
-                    stats.0 += sample as f64 * sample as f64;
-                    stats.2 += 1;
+                    monitoring_input.record_input(sample);
+                }
+                if producer.push(sample).is_err() && args.monitor {
+                    monitoring_input.record_input_overrun();
                 }
             }
         },
@@ -111,14 +253,21 @@ fn main() -> Result<()> {
         &output_config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_exact_mut(output_channels) {
-                let input = consumer.pop().unwrap_or(0.0) * input_gain;
+                let input = match consumer.pop() {
+                    Ok(sample) => sample,
+                    Err(_) => {
+                        if args.monitor {
+                            monitoring_output.record_output_underrun();
+                        }
+                        0.0
+                    }
+                } * input_gain;
                 let amp_output = amp.process(input, controls);
                 let output = speaker
                     .as_mut()
                     .map_or(amp_output, |speaker| speaker.process(amp_output, true));
                 if args.monitor {
-                    let mut stats = monitoring_output.lock().unwrap();
-                    stats.1 += output as f64 * output as f64;
+                    monitoring_output.record_output(output);
                 }
                 frame.fill(0.0);
                 for &channel in &selected_outputs {
@@ -136,14 +285,26 @@ fn main() -> Result<()> {
         let monitor = monitoring.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(1));
-            let mut stats = monitor.lock().unwrap();
-            let count = stats.2.max(1) as f64;
-            let in_rms = (stats.0 / count).sqrt();
-            let out_rms = (stats.1 / count).sqrt();
-            eprintln!("RMS: input {:.5}, output {:.5}", in_rms, out_rms);
-            stats.0 = 0.0;
-            stats.1 = 0.0;
-            stats.2 = 0;
+            let stats = monitor.snapshot_and_reset();
+            let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
+            let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
+            eprintln!(
+                "MON input rms {:.5} ({:+.1} dBFS) peak {:.5} ({:+.1} dBFS) near/clip {}/{} | output rms {:.5} ({:+.1} dBFS) peak {:.5} ({:+.1} dBFS) near/clip {}/{} | xrun in/out {}/{}",
+                in_rms,
+                dbfs(in_rms),
+                stats.input_peak,
+                dbfs(stats.input_peak),
+                stats.input_near_clips,
+                stats.input_clips,
+                out_rms,
+                dbfs(out_rms),
+                stats.output_peak,
+                dbfs(stats.output_peak),
+                stats.output_near_clips,
+                stats.output_clips,
+                stats.input_overruns,
+                stats.output_underruns
+            );
         });
     }
     eprintln!(
@@ -412,6 +573,7 @@ fn print_help() {
          \x20 --cut N                   Power amp Cut, 0-10 [default: 3.5]\n\
          \x20 --input-db DB             Interface input calibration [default: 0]\n\
          \x20 --output-db DB            Safety output trim [default: -9]\n\
+         \x20 --monitor                 Print input/output dBFS peaks, clip counts, and xruns\n\
          \x20 --ir                      Enable the embedded 200 ms speaker IR\n\
          \x20 --list-devices            List CoreAudio devices"
     );

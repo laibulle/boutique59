@@ -1,4 +1,4 @@
-use iced::widget::{button, checkbox, column, container, progress_bar, row, slider, text};
+use iced::widget::{button, checkbox, column, container, progress_bar, pick_list, row, slider, text};
 use iced::{Alignment, Background, Color, Element, Length, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +77,15 @@ pub enum Message {
 pub enum Model {
     Ac30,
     Dumble,
+}
+
+impl std::fmt::Display for Model {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Model::Ac30 => write!(f, "AC30"),
+            Model::Dumble => write!(f, "Dumble ODS"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -244,14 +253,8 @@ impl VoxBoxUi {
                 .spacing(16)
                 .align_items(Alignment::Center),
                     row![
-                        button(text("AC30").size(12))
-                            .on_press(Message::SetModel(Model::Ac30))
-                            .style(iced::theme::Button::custom(SkeuoButton))
-                            .padding(6),
-                        button(text("DUMBLE").size(12))
-                            .on_press(Message::SetModel(Model::Dumble))
-                            .style(iced::theme::Button::custom(SkeuoButton))
-                            .padding(6),
+                        pick_list(&[Model::Ac30, Model::Dumble], Some(selected.model), |m| Message::SetModel(m))
+                            .width(Length::Fixed(160.0)),
                     ]
                     .spacing(8),
                 {

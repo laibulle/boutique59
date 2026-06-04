@@ -28,27 +28,31 @@ standalone-with-ir: build
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB) --ir
 
 standalone-with-ir-clean: VOLUME=3.2
-standalone-with-ir-clean: BASS=5.5
-standalone-with-ir-clean: TREBLE=6.0
-standalone-with-ir-clean: CUT=3.0
+standalone-with-ir-clean: BASS=6.5
+standalone-with-ir-clean: TREBLE=5.2
+standalone-with-ir-clean: CUT=4.0
+standalone-with-ir-clean: OUTPUT_DB=-14
 standalone-with-ir-clean: standalone-with-ir
 
 standalone-with-ir-edge: VOLUME=5.8
-standalone-with-ir-edge: BASS=5.0
-standalone-with-ir-edge: TREBLE=6.2
-standalone-with-ir-edge: CUT=3.5
+standalone-with-ir-edge: BASS=6.0
+standalone-with-ir-edge: TREBLE=5.4
+standalone-with-ir-edge: CUT=4.3
+standalone-with-ir-edge: OUTPUT_DB=-15
 standalone-with-ir-edge: standalone-with-ir
 
 standalone-with-ir-crunch: VOLUME=8.0
-standalone-with-ir-crunch: BASS=4.2
-standalone-with-ir-crunch: TREBLE=6.5
-standalone-with-ir-crunch: CUT=4.0
+standalone-with-ir-crunch: BASS=5.6
+standalone-with-ir-crunch: TREBLE=5.6
+standalone-with-ir-crunch: CUT=4.7
+standalone-with-ir-crunch: OUTPUT_DB=-16
 standalone-with-ir-crunch: standalone-with-ir
 
 standalone-with-ir-driven: VOLUME=10.0
-standalone-with-ir-driven: BASS=3.5
-standalone-with-ir-driven: TREBLE=6.8
-standalone-with-ir-driven: CUT=4.8
+standalone-with-ir-driven: BASS=5.0
+standalone-with-ir-driven: TREBLE=5.8
+standalone-with-ir-driven: CUT=5.2
+standalone-with-ir-driven: OUTPUT_DB=-17
 standalone-with-ir-driven: standalone-with-ir
 
 devices: build

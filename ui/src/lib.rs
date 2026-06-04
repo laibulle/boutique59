@@ -1,4 +1,4 @@
-use iced::widget::{button, checkbox, column, container, progress_bar, pick_list, row, slider, text};
+use iced::widget::{button, checkbox, column, container, pick_list, progress_bar, row, slider, text};
 use iced::{Alignment, Background, Color, Element, Length, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +59,7 @@ impl progress_bar::StyleSheet for SkeuoProgressBar {
 fn skeuo_container(background: Color) -> iced::theme::Container {
     iced::theme::Container::Custom(Box::new(SkeuoContainer(background)))
 }
+
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -153,6 +154,8 @@ impl Default for VoxBoxUi {
     }
 }
 
+// Visual-only knobs and switches implemented with containers (non-canvas).
+
 impl VoxBoxUi {
     pub fn update(&mut self, message: Message) {
         match message {
@@ -205,26 +208,38 @@ impl VoxBoxUi {
     }
 
     fn render_knob(&self, label: &str, value: f32) -> Element<'_, Message> {
+        // Visual knob: circular look with numeric readout; slider remains for interaction.
+        let indicator = container(text(format!("{:.0}", value * 10.0)).size(14))
+            .width(Length::Fixed(48.0))
+            .height(Length::Fixed(48.0))
+            .center_x()
+            .center_y()
+            .style(skeuo_container(Color::from_rgb(0.20, 0.18, 0.15)))
+            .padding(6);
+
         container(
             column![
-                container(text(format!("{:.0}", value * 10.0)).size(16))
-                    .width(Length::Fixed(52.0))
-                    .height(Length::Fixed(52.0))
-                    .center_x()
-                    .center_y()
-                    .style(skeuo_container(Color::from_rgb(0.20, 0.18, 0.15)))
-                    .padding(8),
+                indicator,
                 text(label).size(12),
             ]
-            .spacing(8)
+            .spacing(6)
             .align_items(Alignment::Center),
         )
         .style(skeuo_container(Color::from_rgb(0.24, 0.20, 0.16)))
-        .padding(10)
+        .padding(8)
         .width(Length::Fixed(84.0))
         .into()
     }
 
+    fn render_toggle_visual(&self, on: bool) -> Element<'_, Message> {
+        // Stomp switch visual: LED + label block
+        let led_color = if on { Color::from_rgb(0.14, 0.92, 0.38) } else { Color::from_rgb(0.6, 0.06, 0.06) };
+        let led = container(text(" ")).width(Length::Fixed(12.0)).height(Length::Fixed(12.0)).style(skeuo_container(led_color));
+        container(row![led])
+            .style(skeuo_container(Color::from_rgb(0.10, 0.09, 0.08)))
+            .padding(4)
+            .into()
+    }
     fn render_amp_faceplate(&self, selected: &DeviceState) -> Element<'_, Message> {
         let status_color = if selected.bypassed {
             Color::from_rgb(0.66, 0.12, 0.12)
@@ -252,55 +267,84 @@ impl VoxBoxUi {
                 ]
                 .spacing(16)
                 .align_items(Alignment::Center),
-                    row![
-                        pick_list(&[Model::Ac30, Model::Dumble], Some(selected.model), |m| Message::SetModel(m))
-                            .width(Length::Fixed(160.0)),
-                    ]
-                    .spacing(8),
+                row![
+                    pick_list(&[Model::Ac30, Model::Dumble], Some(selected.model), |m| {
+                        Message::SetModel(m)
+                    })
+                    .width(Length::Fixed(160.0)),
+                ]
+                .spacing(8),
                 {
                     if selected.model == Model::Ac30 {
                         row![
-                            column![self.render_knob("Gain", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Bass", selected.bass), slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Treble", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Cut", selected.cut), slider(0.0..=1.0, selected.cut, |v| Message::CutChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Master", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Gain", selected.gain),
+                                slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Bass", selected.bass),
+                                slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Treble", selected.treble),
+                                slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Cut", selected.cut),
+                                slider(0.0..=1.0, selected.cut, |v| Message::CutChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Master", selected.master),
+                                slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
                         ]
                         .spacing(12)
                         .align_items(Alignment::Center)
                     } else {
                         // Dumble-style controls: Drive, Presence, Tone, Level
                         row![
-                            column![self.render_knob("Drive", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Presence", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Tone", selected.bass), slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
-                            column![self.render_knob("Level", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
-                                .spacing(6)
-                                .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Drive", selected.gain),
+                                slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Presence", selected.treble),
+                                slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Tone", selected.bass),
+                                slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
+                            column![
+                                self.render_knob("Level", selected.master),
+                                slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))
+                            ]
+                            .spacing(6)
+                            .align_items(Alignment::Center),
                         ]
                         .spacing(12)
                         .align_items(Alignment::Center)
                     }
                 },
-                row![
-                    checkbox("Dumble ODS", selected.dumble, |v| Message::ToggleDumble(v)),
-                ]
+                row![checkbox("Dumble ODS", selected.dumble, |v| {
+                    Message::ToggleDumble(v)
+                }),]
                 .spacing(8)
                 .align_items(Alignment::Center),
             ]
@@ -337,15 +381,24 @@ impl VoxBoxUi {
                 .spacing(12)
                 .align_items(Alignment::Center),
                 row![
-                    column![self.render_knob("Gain", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
-                        .spacing(6)
-                        .align_items(Alignment::Center),
-                    column![self.render_knob("Tone", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
-                        .spacing(6)
-                        .align_items(Alignment::Center),
-                    column![self.render_knob("Level", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
-                        .spacing(6)
-                        .align_items(Alignment::Center),
+                    column![
+                        self.render_knob("Gain", selected.gain),
+                        slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))
+                    ]
+                    .spacing(6)
+                    .align_items(Alignment::Center),
+                    column![
+                        self.render_knob("Tone", selected.treble),
+                        slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))
+                    ]
+                    .spacing(6)
+                    .align_items(Alignment::Center),
+                    column![
+                        self.render_knob("Level", selected.master),
+                        slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))
+                    ]
+                    .spacing(6)
+                    .align_items(Alignment::Center),
                 ]
                 .spacing(14)
                 .align_items(Alignment::Center),

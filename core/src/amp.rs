@@ -100,12 +100,7 @@ impl AmpCore {
                 input_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 68e-12),
                 first_cathode_bypass: WdfHighpass::from_rc(sample_rate, 2_200.0, 25e-6),
                 bright_filter: OnePoleLowpass::new(sample_rate, 3_500.0),
-                tone_stack: TopBoostToneStack::new_with_caps(
-                    sample_rate,
-                    220e-12,
-                    2.2e-9,
-                    22e-9,
-                ),
+                tone_stack: TopBoostToneStack::new_with_caps(sample_rate, 220e-12, 2.2e-9, 22e-9),
                 phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
                 cut_filter: OnePoleLowpass::new(sample_rate, 10_000.0),
                 transformer_highpass: WdfHighpass::from_rc(sample_rate, 100_000.0, 47e-9),

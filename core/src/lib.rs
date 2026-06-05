@@ -2,7 +2,7 @@ pub mod amp;
 pub mod circuit;
 pub mod ir;
 
-pub use amp::AmpControls;
+pub use amp::{AmpControls, ComponentBoundary, NoxOperatingPoint, NOX_COMPONENT_BOUNDARIES};
 
 use amp::{VoxAmp, AMP_LATENCY};
 use ir::{SpeakerStage, CONVOLUTION_LATENCY};

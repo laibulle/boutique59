@@ -3,7 +3,7 @@ mod dumble;
 mod jcm800;
 mod nox;
 
-use super::AmpControls;
+use super::{AmpControls, NoxOperatingPoint};
 use ac30::Ac30;
 use dumble::Dumble;
 use jcm800::Jcm800;
@@ -36,6 +36,13 @@ impl AmpCore {
             Self::Dumble(model) => model.reset(),
             Self::Jcm800(model) => model.reset(),
             Self::Nox(model) => model.reset(),
+        }
+    }
+
+    pub(super) fn nox_operating_point(&self) -> Option<NoxOperatingPoint> {
+        match self {
+            Self::Nox(model) => Some(model.operating_point()),
+            _ => None,
         }
     }
 

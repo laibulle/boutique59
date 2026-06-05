@@ -1,6 +1,6 @@
 use super::AmpModel;
 use crate::amp::components::{TopBoostToneStack, WdfHighpass};
-use crate::amp::AmpControls;
+use crate::amp::{AmpControls, NoxOperatingPoint};
 use crate::circuit::passive::{
     BrightVolumeInputParams, BrightVolumeInputStage, CutPresenceParams, CutPresenceStage,
 };
@@ -45,6 +45,36 @@ impl Nox {
             power_stage: PushPullEl84Stage::new(power_stage_params(sample_rate)),
             output_transformer: OutputTransformerStage::new(output_transformer_params(sample_rate)),
             supply: SupplyNetwork::new(supply_network_params(sample_rate)),
+        }
+    }
+
+    pub(super) fn operating_point(&self) -> NoxOperatingPoint {
+        let rails = self.supply.operating_point();
+        let first = self.first_stage.operating_point();
+        let follower = self.follower.operating_point();
+        let drive = self.drive_stage.operating_point();
+        let recovery = self.recovery_stage.operating_point();
+        let phase_inverter = self.phase_inverter.operating_point();
+        let power = self.power_stage.operating_point();
+        let transformer = self.output_transformer.operating_point();
+
+        NoxOperatingPoint {
+            preamp_voltage: rails.preamp_voltage,
+            phase_inverter_voltage: rails.phase_inverter_voltage,
+            power_voltage: rails.power_voltage,
+            first_stage_plate_current: first.plate_current,
+            first_stage_cathode_voltage: first.cathode_voltage,
+            follower_plate_current: follower.plate_current,
+            follower_cathode_voltage: follower.cathode_voltage,
+            drive_stage_plate_current: drive.plate_current,
+            recovery_stage_plate_current: recovery.plate_current,
+            phase_inverter_plate_a_current: phase_inverter.plate_a_current,
+            phase_inverter_plate_b_current: phase_inverter.plate_b_current,
+            phase_inverter_cathode_voltage: phase_inverter.cathode_voltage,
+            power_positive_current: power.positive_current,
+            power_negative_current: power.negative_current,
+            power_cathode_bias_voltage: power.cathode_bias_voltage,
+            transformer_core_flux: transformer.core_flux,
         }
     }
 }

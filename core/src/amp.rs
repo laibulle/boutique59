@@ -19,6 +19,79 @@ pub struct AmpControls {
     pub sag: f32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct NoxOperatingPoint {
+    pub preamp_voltage: f32,
+    pub phase_inverter_voltage: f32,
+    pub power_voltage: f32,
+    pub first_stage_plate_current: f32,
+    pub first_stage_cathode_voltage: f32,
+    pub follower_plate_current: f32,
+    pub follower_cathode_voltage: f32,
+    pub drive_stage_plate_current: f32,
+    pub recovery_stage_plate_current: f32,
+    pub phase_inverter_plate_a_current: f32,
+    pub phase_inverter_plate_b_current: f32,
+    pub phase_inverter_cathode_voltage: f32,
+    pub power_positive_current: f32,
+    pub power_negative_current: f32,
+    pub power_cathode_bias_voltage: f32,
+    pub transformer_core_flux: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ComponentBoundary {
+    pub id: &'static str,
+    pub role: &'static str,
+}
+
+pub const NOX_COMPONENT_BOUNDARIES: &[ComponentBoundary] = &[
+    ComponentBoundary {
+        id: "input_volume",
+        role: "Input coupling, volume attenuation, and bright bypass network",
+    },
+    ComponentBoundary {
+        id: "first_stage",
+        role: "First nonlinear ECC83 common-cathode gain stage",
+    },
+    ComponentBoundary {
+        id: "cathode_follower",
+        role: "ECC83 cathode follower driving the tone stack",
+    },
+    ComponentBoundary {
+        id: "tone_stack",
+        role: "Top-boost passive tone network",
+    },
+    ComponentBoundary {
+        id: "drive_stage",
+        role: "Additional nonlinear ECC83 drive stage",
+    },
+    ComponentBoundary {
+        id: "recovery_stage",
+        role: "Post-drive nonlinear ECC83 recovery stage",
+    },
+    ComponentBoundary {
+        id: "phase_inverter",
+        role: "Shared-cathode long-tail-pair phase inverter",
+    },
+    ComponentBoundary {
+        id: "cut_presence",
+        role: "Cut and presence shaping network",
+    },
+    ComponentBoundary {
+        id: "power_stage",
+        role: "Push-pull EL84 plate-feedback power stage",
+    },
+    ComponentBoundary {
+        id: "supply_network",
+        role: "Shared B+ rail and sag network",
+    },
+    ComponentBoundary {
+        id: "output_transformer",
+        role: "Output transformer filtering and core-flux state",
+    },
+];
+
 /// Oversampled facade around a dedicated amp model.
 pub struct VoxAmp {
     upsampler: FirFilter,
@@ -52,6 +125,10 @@ impl VoxAmp {
         self.upsampler.reset();
         self.core.reset();
         self.downsampler.reset();
+    }
+
+    pub fn nox_operating_point(&self) -> Option<NoxOperatingPoint> {
+        self.core.nox_operating_point()
     }
 
     #[inline]
@@ -326,6 +403,108 @@ mod tests {
             let rms = (sum / count as f32).sqrt();
             assert!(rms > 0.0002, "second={second}, rms={rms}");
         }
+    }
+
+    #[test]
+    fn nox_exposes_replaceable_component_boundaries() {
+        let ids: Vec<_> = NOX_COMPONENT_BOUNDARIES
+            .iter()
+            .map(|boundary| boundary.id)
+            .collect();
+
+        for expected in [
+            "input_volume",
+            "first_stage",
+            "cathode_follower",
+            "tone_stack",
+            "drive_stage",
+            "recovery_stage",
+            "phase_inverter",
+            "cut_presence",
+            "power_stage",
+            "supply_network",
+            "output_transformer",
+        ] {
+            assert!(ids.contains(&expected), "missing boundary {expected}");
+        }
+    }
+
+    #[test]
+    fn nox_operating_point_exposes_shared_state() {
+        let mut amp = VoxAmp::with_model(44_100.0, "nox");
+        let controls = AmpControls {
+            volume: 0.76,
+            bass: 0.52,
+            treble: 0.61,
+            cut: 0.47,
+            output: 10.0_f32.powf(-18.0 / 20.0),
+            drive: 0.68,
+            presence: 0.44,
+            sag: 0.70,
+        };
+        let samples = load_test_guitar_wav();
+        for input in samples.into_iter().cycle().take(44_100 * 2) {
+            amp.process(input, controls);
+        }
+
+        let operating_point = amp.nox_operating_point().unwrap();
+        assert!((150.0..=340.0).contains(&operating_point.power_voltage));
+        assert!((150.0..=operating_point.power_voltage)
+            .contains(&operating_point.phase_inverter_voltage));
+        assert!((120.0..=operating_point.phase_inverter_voltage)
+            .contains(&operating_point.preamp_voltage));
+        assert!(operating_point.first_stage_plate_current.is_finite());
+        assert!(operating_point.follower_plate_current.is_finite());
+        assert!(operating_point.phase_inverter_plate_a_current.is_finite());
+        assert!(operating_point.phase_inverter_plate_b_current.is_finite());
+        assert!(operating_point.power_positive_current.is_finite());
+        assert!(operating_point.power_negative_current.is_finite());
+        assert!(operating_point.transformer_core_flux.is_finite());
+    }
+
+    #[test]
+    fn nox_sample_render_metrics_stay_in_fixture_band() {
+        let mut amp = VoxAmp::with_model(44_100.0, "nox");
+        let mut speaker = SpeakerStage::from_embedded_ir(44_100).unwrap();
+        let controls = AmpControls {
+            volume: 0.76,
+            bass: 0.52,
+            treble: 0.61,
+            cut: 0.47,
+            output: 10.0_f32.powf(-18.0 / 20.0),
+            drive: 0.68,
+            presence: 0.44,
+            sag: 0.70,
+        };
+        let samples = load_test_guitar_wav();
+        let mut sum = 0.0;
+        let mut peak = 0.0_f32;
+        let mut checksum = 0.0_f64;
+        let mut count = 0;
+
+        for (sample_idx, input) in samples.into_iter().cycle().take(44_100 * 4).enumerate() {
+            let output = speaker.process(amp.process(input, controls), true);
+            assert!(output.is_finite());
+            peak = peak.max(output.abs());
+            sum += output * output;
+            checksum += output as f64 * ((sample_idx % 257) as f64 + 1.0);
+            count += 1;
+        }
+
+        let rms = (sum / count as f32).sqrt();
+        let normalized_checksum = checksum / count as f64;
+        assert!(
+            (0.020..0.140).contains(&rms),
+            "rms={rms}, peak={peak}, checksum={normalized_checksum}"
+        );
+        assert!(
+            (0.15..0.95).contains(&peak),
+            "rms={rms}, peak={peak}, checksum={normalized_checksum}"
+        );
+        assert!(
+            (-0.20..0.20).contains(&normalized_checksum),
+            "rms={rms}, peak={peak}, checksum={normalized_checksum}"
+        );
     }
 
     #[test]

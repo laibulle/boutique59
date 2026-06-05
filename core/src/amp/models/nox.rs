@@ -1,7 +1,9 @@
 use super::AmpModel;
 use crate::amp::components::{OnePoleLowpass, TopBoostToneStack, WdfHighpass};
 use crate::amp::AmpControls;
-use crate::circuit::power::{PushPullEl84Params, PushPullEl84Stage};
+use crate::circuit::power::{
+    OutputTransformerParams, OutputTransformerStage, PushPullEl84Params, PushPullEl84Stage,
+};
 use crate::circuit::triode::{
     CathodeFollowerParams, CathodeFollowerStage, CommonCathodeParams, CommonCathodeStage,
     LongTailPairParams, LongTailPairStage, TriodeParams,
@@ -19,9 +21,8 @@ pub(in crate::amp) struct Nox {
     phase_inverter_coupling: WdfHighpass,
     phase_inverter: LongTailPairStage,
     cut_filter: OnePoleLowpass,
-    transformer_highpass: WdfHighpass,
-    transformer_lowpass: OnePoleLowpass,
     power_stage: PushPullEl84Stage,
+    output_transformer: OutputTransformerStage,
 }
 
 impl Nox {
@@ -38,9 +39,8 @@ impl Nox {
             phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
             phase_inverter: LongTailPairStage::new(phase_inverter_params(sample_rate)),
             cut_filter: OnePoleLowpass::new(sample_rate, 12_000.0),
-            transformer_highpass: WdfHighpass::from_rc(sample_rate, 100_000.0, 47e-9),
-            transformer_lowpass: OnePoleLowpass::new(sample_rate, 13_000.0),
             power_stage: PushPullEl84Stage::new(power_stage_params(sample_rate)),
+            output_transformer: OutputTransformerStage::new(output_transformer_params(sample_rate)),
         }
     }
 }
@@ -88,10 +88,7 @@ impl AmpModel for Nox {
         let voiced_output = cut_output + (differential - cut_output) * presence * 0.35;
 
         let power_output = self.power_stage.process(voiced_output, controls.sag);
-
-        let mut transformer = self.transformer_highpass.process(power_output);
-        transformer = self.transformer_lowpass.process(transformer);
-        transformer * controls.output
+        self.output_transformer.process(power_output) * controls.output
     }
 }
 
@@ -189,5 +186,16 @@ fn power_stage_params(sample_rate: f32) -> PushPullEl84Params {
         current_gain: 0.0048,
         compression: 0.22,
         output_scale: 0.020,
+    }
+}
+
+fn output_transformer_params(sample_rate: f32) -> OutputTransformerParams {
+    OutputTransformerParams {
+        sample_rate,
+        primary_resistance: 100_000.0,
+        primary_inductance: 47.0,
+        leakage_cutoff_hz: 13_000.0,
+        core_saturation: 1_400.0,
+        output_scale: 1.0,
     }
 }

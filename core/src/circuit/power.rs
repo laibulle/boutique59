@@ -15,6 +15,16 @@ pub struct PushPullEl84Params {
     pub output_scale: f32,
 }
 
+#[derive(Clone, Copy)]
+pub struct OutputTransformerParams {
+    pub sample_rate: f32,
+    pub primary_resistance: f32,
+    pub primary_inductance: f32,
+    pub leakage_cutoff_hz: f32,
+    pub core_saturation: f32,
+    pub output_scale: f32,
+}
+
 pub struct PushPullEl84Stage {
     params: PushPullEl84Params,
     supply_voltage: f32,
@@ -27,6 +37,13 @@ pub struct PushPullEl84Stage {
     negative_current: f32,
 }
 
+pub struct OutputTransformerStage {
+    params: OutputTransformerParams,
+    primary_lowpass: OnePole,
+    leakage_lowpass: OnePole,
+    core_flux: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct PushPullEl84OperatingPoint {
     pub supply_voltage: f32,
@@ -37,10 +54,51 @@ pub struct PushPullEl84OperatingPoint {
     pub negative_current: f32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct OutputTransformerOperatingPoint {
+    pub core_flux: f32,
+}
+
 #[derive(Clone, Copy)]
 struct PentodePoint {
     current: f32,
     d_current_d_plate: f32,
+}
+
+impl OutputTransformerStage {
+    pub fn new(params: OutputTransformerParams) -> Self {
+        let primary_cutoff_hz = params.primary_resistance
+            / (std::f32::consts::TAU * params.primary_inductance.max(1e-6));
+        Self {
+            params,
+            primary_lowpass: OnePole::new(params.sample_rate, primary_cutoff_hz),
+            leakage_lowpass: OnePole::new(params.sample_rate, params.leakage_cutoff_hz),
+            core_flux: 0.0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.primary_lowpass.reset();
+        self.leakage_lowpass.reset();
+        self.core_flux = 0.0;
+    }
+
+    pub fn operating_point(&self) -> OutputTransformerOperatingPoint {
+        OutputTransformerOperatingPoint {
+            core_flux: self.core_flux,
+        }
+    }
+
+    pub fn process(&mut self, primary_voltage: f32) -> f32 {
+        let primary_highpass = primary_voltage - self.primary_lowpass.process(primary_voltage);
+        let flux_coefficient = 1.0 / self.params.sample_rate;
+        self.core_flux += flux_coefficient * primary_highpass;
+        let saturation = 1.0 / (1.0 + (self.core_flux.abs() * self.params.core_saturation).powi(2));
+        self.core_flux *= 0.9995;
+
+        self.leakage_lowpass
+            .process(primary_highpass * saturation * self.params.output_scale)
+    }
 }
 
 impl PushPullEl84Stage {
@@ -173,6 +231,29 @@ impl PushPullEl84Stage {
     }
 }
 
+struct OnePole {
+    coefficient: f32,
+    state: f32,
+}
+
+impl OnePole {
+    fn new(sample_rate: f32, cutoff_hz: f32) -> Self {
+        Self {
+            coefficient: 1.0 - (-std::f32::consts::TAU * cutoff_hz / sample_rate).exp(),
+            state: 0.0,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.state = 0.0;
+    }
+
+    fn process(&mut self, input: f32) -> f32 {
+        self.state += self.coefficient * (input - self.state);
+        self.state
+    }
+}
+
 fn softplus(value: f32, scale: f32) -> f32 {
     let normalized = value / scale;
     if normalized > 20.0 {
@@ -204,6 +285,17 @@ mod tests {
             current_gain: 0.0048,
             compression: 0.22,
             output_scale: 0.020,
+        })
+    }
+
+    fn transformer() -> OutputTransformerStage {
+        OutputTransformerStage::new(OutputTransformerParams {
+            sample_rate: 48_000.0,
+            primary_resistance: 100_000.0,
+            primary_inductance: 47.0,
+            leakage_cutoff_hz: 13_000.0,
+            core_saturation: 1_400.0,
+            output_scale: 1.0,
         })
     }
 
@@ -290,5 +382,77 @@ mod tests {
             elapsed < Duration::from_millis(100),
             "elapsed={elapsed:?} for {sample_count} samples"
         );
+    }
+
+    #[test]
+    fn transformer_blocks_dc() {
+        let mut transformer = transformer();
+        let mut sum = 0.0;
+        for sample_idx in 0..48_000 {
+            let output = transformer.process(0.5);
+            if sample_idx >= 47_000 {
+                sum += output.abs();
+            }
+        }
+
+        assert!(sum / 1_000.0 < 0.01, "settled_dc={}", sum / 1_000.0);
+    }
+
+    #[test]
+    fn transformer_rolls_off_leakage_highs() {
+        let mut low = transformer();
+        let mut high = transformer();
+        let low_rms = transformer_sine_rms(&mut low, 1_000.0, 0.2);
+        let high_rms = transformer_sine_rms(&mut high, 18_000.0, 0.2);
+
+        assert!(
+            low_rms > high_rms * 1.15,
+            "low_rms={low_rms}, high_rms={high_rms}"
+        );
+    }
+
+    #[test]
+    fn transformer_core_flux_compresses_sustained_low_end() {
+        let mut light = transformer();
+        let mut heavy = transformer();
+        let light_rms = transformer_sine_rms(&mut light, 80.0, 0.1);
+        let heavy_rms = transformer_sine_rms(&mut heavy, 80.0, 1.0);
+        let linear_ratio = heavy_rms / light_rms;
+
+        assert!(
+            linear_ratio < 9.4,
+            "light_rms={light_rms}, heavy_rms={heavy_rms}, linear_ratio={linear_ratio}"
+        );
+    }
+
+    #[test]
+    fn transformer_reset_clears_flux_history() {
+        let mut transformer = transformer();
+        for sample_idx in 0..12_000 {
+            let input = (std::f32::consts::TAU * 80.0 * sample_idx as f32 / 48_000.0).sin();
+            transformer.process(input);
+        }
+        assert!(transformer.operating_point().core_flux.abs() > 0.0);
+        transformer.reset();
+        assert_eq!(transformer.operating_point().core_flux, 0.0);
+    }
+
+    fn transformer_sine_rms(
+        transformer: &mut OutputTransformerStage,
+        frequency: f32,
+        amplitude: f32,
+    ) -> f32 {
+        let mut sum = 0.0;
+        let mut count = 0;
+        for sample_idx in 0..48_000 {
+            let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / 48_000.0).sin()
+                * amplitude;
+            let output = transformer.process(input);
+            if sample_idx >= 24_000 {
+                sum += output * output;
+                count += 1;
+            }
+        }
+        (sum / count as f32).sqrt()
     }
 }

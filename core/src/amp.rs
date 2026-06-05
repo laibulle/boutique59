@@ -182,27 +182,33 @@ mod tests {
     }
 
     #[test]
-    fn nox_supply_sags_under_sustained_load() {
-        let mut amp = VoxAmp::with_model(48_000.0, "nox");
-        let mut controls = controls();
-        controls.volume = 1.0;
-        controls.cut = 0.2;
-        controls.output = 1.0;
-        controls.sag = 1.0;
+    fn nox_supply_sag_reduces_settled_level() {
+        let mut stiff = VoxAmp::with_model(48_000.0, "nox");
+        let mut saggy = VoxAmp::with_model(48_000.0, "nox");
+        let mut stiff_controls = controls();
+        stiff_controls.volume = 1.0;
+        stiff_controls.cut = 0.2;
+        stiff_controls.output = 1.0;
+        stiff_controls.sag = 0.0;
+        let mut saggy_controls = stiff_controls;
+        saggy_controls.sag = 1.0;
 
-        let mut early = 0.0;
-        let mut late = 0.0;
-        for sample_idx in 0..24_000 {
+        let mut stiff_late = 0.0;
+        let mut saggy_late = 0.0;
+        for sample_idx in 0..36_000 {
             let input = (std::f32::consts::TAU * 110.0 * sample_idx as f32 / 48_000.0).sin() * 0.55;
-            let output = amp.process(input, controls);
-            if (512..2_560).contains(&sample_idx) {
-                early += output * output;
-            } else if sample_idx >= 21_952 {
-                late += output * output;
+            let stiff_output = stiff.process(input, stiff_controls);
+            let saggy_output = saggy.process(input, saggy_controls);
+            if sample_idx >= 24_000 {
+                stiff_late += stiff_output * stiff_output;
+                saggy_late += saggy_output * saggy_output;
             }
         }
 
-        assert!(late < early * 0.96, "early={early}, late={late}");
+        assert!(
+            saggy_late < stiff_late * 0.92,
+            "stiff={stiff_late}, saggy={saggy_late}"
+        );
     }
 
     #[test]

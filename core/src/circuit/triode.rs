@@ -54,6 +54,33 @@ pub struct CommonCathodeOperatingPoint {
     pub supply_voltage: f32,
 }
 
+#[derive(Clone, Copy)]
+pub struct CathodeFollowerParams {
+    pub sample_rate: f32,
+    pub grid_leak_resistance: f32,
+    pub input_coupling_capacitance: f32,
+    pub cathode_resistance: f32,
+    pub nominal_supply_voltage: f32,
+    pub input_gain: f32,
+    pub output_scale: f32,
+    pub triode: TriodeParams,
+}
+
+pub struct CathodeFollowerStage {
+    params: CathodeFollowerParams,
+    input_coupling: CouplingCapacitor,
+    last_grid_voltage: f32,
+    last_cathode_voltage: f32,
+    reference_cathode_voltage: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CathodeFollowerOperatingPoint {
+    pub grid_voltage: f32,
+    pub cathode_voltage: f32,
+    pub supply_voltage: f32,
+}
+
 impl CommonCathodeStage {
     pub fn new(params: CommonCathodeParams) -> Self {
         let quiescent_plate = params.nominal_supply_voltage * 0.62;
@@ -100,7 +127,8 @@ impl CommonCathodeStage {
     pub fn process(&mut self, input: f32) -> f32 {
         let input_voltage = input * self.params.input_gain;
         let operating_point = self.solve_operating_point(input_voltage);
-        let plate_current = self.triode_current(
+        let plate_current = triode_current(
+            self.params.triode,
             operating_point.plate_voltage,
             operating_point.grid_voltage,
             operating_point.cathode_voltage,
@@ -162,8 +190,13 @@ impl CommonCathodeStage {
         grid_voltage: f32,
         input_voltage: f32,
     ) -> [f32; 3] {
-        let plate_current = self.triode_current(plate_voltage, grid_voltage, cathode_voltage);
-        let grid_current = self.grid_current(grid_voltage, cathode_voltage);
+        let plate_current = triode_current(
+            self.params.triode,
+            plate_voltage,
+            grid_voltage,
+            cathode_voltage,
+        );
+        let grid_current = grid_current(grid_voltage, cathode_voltage);
         let cathode_resistor_current = cathode_voltage / self.params.cathode_resistance;
         let cathode_bypass_current = self
             .cathode_bypass
@@ -206,26 +239,6 @@ impl CommonCathodeStage {
         jacobian
     }
 
-    fn triode_current(&self, plate_voltage: f32, grid_voltage: f32, cathode_voltage: f32) -> f32 {
-        let plate_to_cathode = (plate_voltage - cathode_voltage).max(0.0);
-        let grid_to_cathode = grid_voltage - cathode_voltage;
-        let params = self.params.triode;
-
-        let shaping = (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
-            .exp()
-            .ln_1p()
-            / params.kp;
-        let knee = (plate_to_cathode / params.kvb).sqrt();
-        let conduction = (plate_to_cathode / params.kg1) * shaping.max(0.0).powf(params.ex) * knee;
-        conduction.clamp(0.0, 0.040)
-    }
-
-    fn grid_current(&self, grid_voltage: f32, cathode_voltage: f32) -> f32 {
-        let grid_to_cathode = grid_voltage - cathode_voltage;
-        let overdrive = softplus(grid_to_cathode, 0.04);
-        ((overdrive * overdrive) / 50_000.0).clamp(0.0, 0.005)
-    }
-
     fn update_supply(&mut self, plate_current: f32) {
         let target =
             self.params.nominal_supply_voltage - plate_current * self.params.supply_resistance;
@@ -242,6 +255,132 @@ impl CommonCathodeStage {
         if let Some(capacitor) = &mut self.cathode_bypass {
             capacitor.update(cathode_voltage);
         }
+    }
+}
+
+impl CathodeFollowerStage {
+    pub fn new(params: CathodeFollowerParams) -> Self {
+        let input_coupling =
+            CouplingCapacitor::new(params.input_coupling_capacitance, params.sample_rate);
+        let mut stage = Self {
+            params,
+            input_coupling,
+            last_grid_voltage: 0.0,
+            last_cathode_voltage: 1.5,
+            reference_cathode_voltage: 1.5,
+        };
+        let operating_point = stage.solve_operating_point(0.0);
+        stage.last_grid_voltage = operating_point.grid_voltage;
+        stage.last_cathode_voltage = operating_point.cathode_voltage;
+        stage.reference_cathode_voltage = operating_point.cathode_voltage;
+        stage
+    }
+
+    pub fn reset(&mut self) {
+        self.input_coupling.reset();
+        let operating_point = self.solve_operating_point(0.0);
+        self.last_grid_voltage = operating_point.grid_voltage;
+        self.last_cathode_voltage = operating_point.cathode_voltage;
+        self.reference_cathode_voltage = operating_point.cathode_voltage;
+    }
+
+    pub fn operating_point(&self) -> CathodeFollowerOperatingPoint {
+        CathodeFollowerOperatingPoint {
+            grid_voltage: self.last_grid_voltage,
+            cathode_voltage: self.last_cathode_voltage,
+            supply_voltage: self.params.nominal_supply_voltage,
+        }
+    }
+
+    pub fn process(&mut self, input: f32) -> f32 {
+        let input_voltage = input * self.params.input_gain;
+        let operating_point = self.solve_operating_point(input_voltage);
+        self.input_coupling
+            .update(operating_point.grid_voltage, input_voltage);
+        self.last_grid_voltage = operating_point.grid_voltage;
+        self.last_cathode_voltage = operating_point.cathode_voltage;
+
+        (operating_point.cathode_voltage - self.reference_cathode_voltage)
+            * self.params.output_scale
+    }
+
+    fn solve_operating_point(&self, input_voltage: f32) -> CathodeFollowerOperatingPoint {
+        let mut cathode_voltage = self
+            .last_cathode_voltage
+            .clamp(0.0, self.params.nominal_supply_voltage);
+        let mut grid_voltage = self.last_grid_voltage.clamp(-50.0, 50.0);
+
+        for _ in 0..NEWTON_ITERATIONS {
+            let residuals = self.residuals(cathode_voltage, grid_voltage, input_voltage);
+            if residuals.iter().copied().map(f32::abs).fold(0.0, f32::max) < NEWTON_TOLERANCE {
+                break;
+            }
+
+            let jacobian = self.jacobian(cathode_voltage, grid_voltage, input_voltage);
+            let determinant = jacobian[0][0] * jacobian[1][1] - jacobian[0][1] * jacobian[1][0];
+            if determinant.abs() < 1e-12 {
+                break;
+            }
+
+            let delta_cathode =
+                (-residuals[0] * jacobian[1][1] + jacobian[0][1] * residuals[1]) / determinant;
+            let delta_grid =
+                (jacobian[1][0] * residuals[0] - jacobian[0][0] * residuals[1]) / determinant;
+
+            cathode_voltage =
+                (cathode_voltage + delta_cathode).clamp(0.0, self.params.nominal_supply_voltage);
+            grid_voltage = (grid_voltage + delta_grid).clamp(-50.0, 50.0);
+        }
+
+        CathodeFollowerOperatingPoint {
+            grid_voltage,
+            cathode_voltage,
+            supply_voltage: self.params.nominal_supply_voltage,
+        }
+    }
+
+    fn residuals(&self, cathode_voltage: f32, grid_voltage: f32, input_voltage: f32) -> [f32; 2] {
+        let plate_current = triode_current(
+            self.params.triode,
+            self.params.nominal_supply_voltage,
+            grid_voltage,
+            cathode_voltage,
+        );
+        let grid_current = grid_current(grid_voltage, cathode_voltage);
+        let cathode_resistor_current = cathode_voltage / self.params.cathode_resistance;
+        let coupling_current = self.input_coupling.current_at(grid_voltage, input_voltage);
+        let grid_leak_current = grid_voltage / self.params.grid_leak_resistance;
+
+        [
+            plate_current + grid_current - cathode_resistor_current,
+            coupling_current + grid_leak_current + grid_current,
+        ]
+    }
+
+    fn jacobian(
+        &self,
+        cathode_voltage: f32,
+        grid_voltage: f32,
+        input_voltage: f32,
+    ) -> [[f32; 2]; 2] {
+        let variables = [cathode_voltage, grid_voltage];
+        let steps = [0.01, 0.01];
+        let mut jacobian = [[0.0; 2]; 2];
+
+        for column in 0..2 {
+            let mut plus = variables;
+            let mut minus = variables;
+            plus[column] += steps[column];
+            minus[column] -= steps[column];
+            let plus_residuals = self.residuals(plus[0], plus[1], input_voltage);
+            let minus_residuals = self.residuals(minus[0], minus[1], input_voltage);
+            for row in 0..2 {
+                jacobian[row][column] =
+                    (plus_residuals[row] - minus_residuals[row]) / (2.0 * steps[column]);
+            }
+        }
+
+        jacobian
     }
 }
 
@@ -309,6 +448,30 @@ impl GroundedCapacitor {
         self.previous_voltage = 0.0;
         self.previous_current = 0.0;
     }
+}
+
+fn triode_current(
+    params: TriodeParams,
+    plate_voltage: f32,
+    grid_voltage: f32,
+    cathode_voltage: f32,
+) -> f32 {
+    let plate_to_cathode = (plate_voltage - cathode_voltage).max(0.0);
+    let grid_to_cathode = grid_voltage - cathode_voltage;
+
+    let shaping = (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
+        .exp()
+        .ln_1p()
+        / params.kp;
+    let knee = (plate_to_cathode / params.kvb).sqrt();
+    let conduction = (plate_to_cathode / params.kg1) * shaping.max(0.0).powf(params.ex) * knee;
+    conduction.clamp(0.0, 0.040)
+}
+
+fn grid_current(grid_voltage: f32, cathode_voltage: f32) -> f32 {
+    let grid_to_cathode = grid_voltage - cathode_voltage;
+    let overdrive = softplus(grid_to_cathode, 0.04);
+    ((overdrive * overdrive) / 50_000.0).clamp(0.0, 0.005)
 }
 
 fn softplus(value: f32, scale: f32) -> f32 {
@@ -381,6 +544,19 @@ mod tests {
             nominal_supply_voltage: 280.0,
             input_gain: 1.8,
             output_scale: 0.018,
+            triode: TriodeParams::ECC83,
+        })
+    }
+
+    fn follower() -> CathodeFollowerStage {
+        CathodeFollowerStage::new(CathodeFollowerParams {
+            sample_rate: 48_000.0,
+            grid_leak_resistance: 1_000_000.0,
+            input_coupling_capacitance: 47e-9,
+            cathode_resistance: 100_000.0,
+            nominal_supply_voltage: 280.0,
+            input_gain: 1.0,
+            output_scale: 1.0,
             triode: TriodeParams::ECC83,
         })
     }
@@ -510,6 +686,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn cathode_follower_biases_to_finite_operating_point() {
+        let mut follower = follower();
+        for _ in 0..1024 {
+            assert!(follower.process(0.0).is_finite());
+        }
+
+        let operating_point = follower.operating_point();
+        assert!(operating_point.cathode_voltage > 0.2);
+        assert!(operating_point.cathode_voltage < operating_point.supply_voltage);
+        assert!(operating_point.grid_voltage.abs() < 0.01);
+    }
+
+    #[test]
+    fn cathode_follower_tracks_small_signal_below_unity() {
+        let mut follower = follower();
+        settle_follower_idle(&mut follower);
+        let response = follower_rms(&mut follower, 1_000.0, 0.020);
+        let input_rms = 0.020 / std::f32::consts::SQRT_2;
+        let gain = response / input_rms;
+
+        assert!(
+            (0.65..0.99).contains(&gain),
+            "response={response}, input_rms={input_rms}, gain={gain}"
+        );
+    }
+
+    #[test]
+    fn cathode_follower_recovers_from_grid_current_blocking() {
+        let mut follower = follower();
+        for sample_idx in 0..12_000 {
+            let input = (std::f32::consts::TAU * 110.0 * sample_idx as f32 / 48_000.0).sin() * 4.0;
+            follower.process(input);
+        }
+        let overloaded_grid = follower.operating_point().grid_voltage;
+
+        for _ in 0..48_000 {
+            follower.process(0.0);
+        }
+        let recovered_grid = follower.operating_point().grid_voltage;
+
+        assert!(
+            recovered_grid.abs() < overloaded_grid.abs(),
+            "overloaded_grid={overloaded_grid}, recovered_grid={recovered_grid}"
+        );
+    }
+
     struct NodeRms {
         grid: f32,
         plate: f32,
@@ -542,6 +765,25 @@ mod tests {
         for _ in 0..96_000 {
             stage.process(0.0);
         }
+    }
+
+    fn settle_follower_idle(stage: &mut CathodeFollowerStage) {
+        for _ in 0..96_000 {
+            stage.process(0.0);
+        }
+    }
+
+    fn follower_rms(stage: &mut CathodeFollowerStage, frequency: f32, amplitude: f32) -> f32 {
+        let mut samples = Vec::new();
+        for sample_idx in 0..24_000 {
+            let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / 48_000.0).sin()
+                * amplitude;
+            let output = stage.process(input);
+            if sample_idx >= 12_000 {
+                samples.push(output);
+            }
+        }
+        rms(&samples)
     }
 
     fn rms(samples: &[f32]) -> f32 {

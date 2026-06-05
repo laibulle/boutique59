@@ -1,16 +1,19 @@
 use super::AmpModel;
 use crate::amp::components::{
-    cathode_follower, el84_bank, triode_stage, OnePoleLowpass, SupplyNode, TopBoostToneStack,
-    WdfHighpass,
+    el84_bank, triode_stage, OnePoleLowpass, SupplyNode, TopBoostToneStack, WdfHighpass,
 };
 use crate::amp::AmpControls;
-use crate::circuit::triode::{CommonCathodeParams, CommonCathodeStage, TriodeParams};
+use crate::circuit::triode::{
+    CathodeFollowerParams, CathodeFollowerStage, CommonCathodeParams, CommonCathodeStage,
+    TriodeParams,
+};
 
 pub(in crate::amp) struct Nox {
     sample_rate: f32,
     input_coupling: WdfHighpass,
     bright_filter: OnePoleLowpass,
     first_stage: CommonCathodeStage,
+    follower: CathodeFollowerStage,
     tone_stack: TopBoostToneStack,
     phase_inverter_coupling: WdfHighpass,
     cut_filter: OnePoleLowpass,
@@ -26,6 +29,7 @@ impl Nox {
             input_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
             bright_filter: OnePoleLowpass::new(sample_rate, 2_900.0),
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
+            follower: CathodeFollowerStage::new(follower_params(sample_rate)),
             tone_stack: TopBoostToneStack::new(sample_rate),
             phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
             cut_filter: OnePoleLowpass::new(sample_rate, 12_000.0),
@@ -52,7 +56,7 @@ impl AmpModel for Nox {
         let first_stage = self.first_stage.process(volume_output);
         let preamp_voltage = self.first_stage.operating_point().supply_voltage / 280.0;
 
-        let follower_drive = cathode_follower(first_stage * preamp_voltage);
+        let follower_drive = self.follower.process(first_stage * preamp_voltage);
         let toned = self
             .tone_stack
             .process(follower_drive, controls.bass, controls.treble);
@@ -84,7 +88,7 @@ impl AmpModel for Nox {
         let positive_bank = el84_bank(power_drive);
         let negative_bank = el84_bank(-power_drive);
         let push_pull_current =
-            (positive_bank.abs() + negative_bank.abs()) * (0.020 + controls.sag * 0.350);
+            (positive_bank.abs() + negative_bank.abs()) * (0.020 + controls.sag * 0.700);
         let updated_power_voltage = self.power_supply.process(push_pull_current) / 320.0;
         let power_output = (positive_bank - negative_bank) * 0.72 * updated_power_voltage;
 
@@ -107,6 +111,19 @@ fn first_stage_params(sample_rate: f32) -> CommonCathodeParams {
         nominal_supply_voltage: 280.0,
         input_gain: 3.2,
         output_scale: 0.16,
+        triode: TriodeParams::ECC83,
+    }
+}
+
+fn follower_params(sample_rate: f32) -> CathodeFollowerParams {
+    CathodeFollowerParams {
+        sample_rate,
+        grid_leak_resistance: 1_000_000.0,
+        input_coupling_capacitance: 47e-9,
+        cathode_resistance: 100_000.0,
+        nominal_supply_voltage: 280.0,
+        input_gain: 1.0,
+        output_scale: 0.85,
         triode: TriodeParams::ECC83,
     }
 }

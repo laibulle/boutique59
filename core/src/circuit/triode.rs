@@ -81,6 +81,43 @@ pub struct CathodeFollowerOperatingPoint {
     pub supply_voltage: f32,
 }
 
+#[derive(Clone, Copy)]
+pub struct LongTailPairParams {
+    pub sample_rate: f32,
+    pub grid_leak_resistance: f32,
+    pub input_coupling_capacitance: f32,
+    pub plate_a_resistance: f32,
+    pub plate_b_resistance: f32,
+    pub tail_resistance: f32,
+    pub nominal_supply_voltage: f32,
+    pub input_gain: f32,
+    pub output_scale: f32,
+    pub triode: TriodeParams,
+}
+
+pub struct LongTailPairStage {
+    params: LongTailPairParams,
+    input_a_coupling: CouplingCapacitor,
+    input_b_coupling: CouplingCapacitor,
+    last_plate_a_voltage: f32,
+    last_plate_b_voltage: f32,
+    last_cathode_voltage: f32,
+    last_grid_a_voltage: f32,
+    last_grid_b_voltage: f32,
+    reference_plate_a_voltage: f32,
+    reference_plate_b_voltage: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LongTailPairOperatingPoint {
+    pub plate_a_voltage: f32,
+    pub plate_b_voltage: f32,
+    pub cathode_voltage: f32,
+    pub grid_a_voltage: f32,
+    pub grid_b_voltage: f32,
+    pub supply_voltage: f32,
+}
+
 impl CommonCathodeStage {
     pub fn new(params: CommonCathodeParams) -> Self {
         let quiescent_plate = params.nominal_supply_voltage * 0.62;
@@ -384,6 +421,254 @@ impl CathodeFollowerStage {
     }
 }
 
+impl LongTailPairStage {
+    pub fn new(params: LongTailPairParams) -> Self {
+        let input_a_coupling =
+            CouplingCapacitor::new(params.input_coupling_capacitance, params.sample_rate);
+        let input_b_coupling =
+            CouplingCapacitor::new(params.input_coupling_capacitance, params.sample_rate);
+        let mut stage = Self {
+            params,
+            input_a_coupling,
+            input_b_coupling,
+            last_plate_a_voltage: params.nominal_supply_voltage * 0.62,
+            last_plate_b_voltage: params.nominal_supply_voltage * 0.62,
+            last_cathode_voltage: 1.5,
+            last_grid_a_voltage: 0.0,
+            last_grid_b_voltage: 0.0,
+            reference_plate_a_voltage: params.nominal_supply_voltage * 0.62,
+            reference_plate_b_voltage: params.nominal_supply_voltage * 0.62,
+        };
+        let operating_point = stage.solve_operating_point(0.0, 0.0);
+        stage.last_plate_a_voltage = operating_point.plate_a_voltage;
+        stage.last_plate_b_voltage = operating_point.plate_b_voltage;
+        stage.last_cathode_voltage = operating_point.cathode_voltage;
+        stage.last_grid_a_voltage = operating_point.grid_a_voltage;
+        stage.last_grid_b_voltage = operating_point.grid_b_voltage;
+        stage.reference_plate_a_voltage = operating_point.plate_a_voltage;
+        stage.reference_plate_b_voltage = operating_point.plate_b_voltage;
+        stage
+    }
+
+    pub fn reset(&mut self) {
+        self.input_a_coupling.reset();
+        self.input_b_coupling.reset();
+        let operating_point = self.solve_operating_point(0.0, 0.0);
+        self.last_plate_a_voltage = operating_point.plate_a_voltage;
+        self.last_plate_b_voltage = operating_point.plate_b_voltage;
+        self.last_cathode_voltage = operating_point.cathode_voltage;
+        self.last_grid_a_voltage = operating_point.grid_a_voltage;
+        self.last_grid_b_voltage = operating_point.grid_b_voltage;
+        self.reference_plate_a_voltage = operating_point.plate_a_voltage;
+        self.reference_plate_b_voltage = operating_point.plate_b_voltage;
+    }
+
+    pub fn operating_point(&self) -> LongTailPairOperatingPoint {
+        LongTailPairOperatingPoint {
+            plate_a_voltage: self.last_plate_a_voltage,
+            plate_b_voltage: self.last_plate_b_voltage,
+            cathode_voltage: self.last_cathode_voltage,
+            grid_a_voltage: self.last_grid_a_voltage,
+            grid_b_voltage: self.last_grid_b_voltage,
+            supply_voltage: self.params.nominal_supply_voltage,
+        }
+    }
+
+    pub fn process(&mut self, input: f32) -> f32 {
+        self.process_differential(input, 0.0)
+    }
+
+    pub fn process_differential(&mut self, input_a: f32, input_b: f32) -> f32 {
+        let input_a_voltage = input_a * self.params.input_gain;
+        let input_b_voltage = input_b * self.params.input_gain;
+        let operating_point = self.solve_operating_point(input_a_voltage, input_b_voltage);
+
+        self.input_a_coupling
+            .update(operating_point.grid_a_voltage, input_a_voltage);
+        self.input_b_coupling
+            .update(operating_point.grid_b_voltage, input_b_voltage);
+        self.last_plate_a_voltage = operating_point.plate_a_voltage;
+        self.last_plate_b_voltage = operating_point.plate_b_voltage;
+        self.last_cathode_voltage = operating_point.cathode_voltage;
+        self.last_grid_a_voltage = operating_point.grid_a_voltage;
+        self.last_grid_b_voltage = operating_point.grid_b_voltage;
+
+        let plate_a = operating_point.plate_a_voltage - self.reference_plate_a_voltage;
+        let plate_b = operating_point.plate_b_voltage - self.reference_plate_b_voltage;
+        (plate_b - plate_a) * self.params.output_scale
+    }
+
+    fn solve_operating_point(
+        &self,
+        input_a_voltage: f32,
+        input_b_voltage: f32,
+    ) -> LongTailPairOperatingPoint {
+        let mut plate_a_voltage = self
+            .last_plate_a_voltage
+            .clamp(1.0, self.params.nominal_supply_voltage);
+        let mut plate_b_voltage = self
+            .last_plate_b_voltage
+            .clamp(1.0, self.params.nominal_supply_voltage);
+        let mut cathode_voltage = self
+            .last_cathode_voltage
+            .clamp(0.0, self.params.nominal_supply_voltage);
+        let mut grid_a_voltage = self.last_grid_a_voltage.clamp(-50.0, 15.0);
+        let mut grid_b_voltage = self.last_grid_b_voltage.clamp(-50.0, 15.0);
+
+        for _ in 0..NEWTON_ITERATIONS {
+            let residuals = self.residuals(
+                plate_a_voltage,
+                plate_b_voltage,
+                cathode_voltage,
+                grid_a_voltage,
+                grid_b_voltage,
+                input_a_voltage,
+                input_b_voltage,
+            );
+            if residuals.iter().copied().map(f32::abs).fold(0.0, f32::max) < NEWTON_TOLERANCE {
+                break;
+            }
+
+            let jacobian = self.jacobian(
+                plate_a_voltage,
+                plate_b_voltage,
+                cathode_voltage,
+                grid_a_voltage,
+                grid_b_voltage,
+                input_a_voltage,
+                input_b_voltage,
+            );
+            let rhs = [
+                -residuals[0],
+                -residuals[1],
+                -residuals[2],
+                -residuals[3],
+                -residuals[4],
+            ];
+            let Some(delta) = solve_5x5(jacobian, rhs) else {
+                break;
+            };
+
+            plate_a_voltage =
+                (plate_a_voltage + delta[0]).clamp(1.0, self.params.nominal_supply_voltage);
+            plate_b_voltage =
+                (plate_b_voltage + delta[1]).clamp(1.0, self.params.nominal_supply_voltage);
+            cathode_voltage =
+                (cathode_voltage + delta[2]).clamp(0.0, self.params.nominal_supply_voltage);
+            grid_a_voltage = (grid_a_voltage + delta[3]).clamp(-50.0, 15.0);
+            grid_b_voltage = (grid_b_voltage + delta[4]).clamp(-50.0, 15.0);
+        }
+
+        LongTailPairOperatingPoint {
+            plate_a_voltage,
+            plate_b_voltage,
+            cathode_voltage,
+            grid_a_voltage,
+            grid_b_voltage,
+            supply_voltage: self.params.nominal_supply_voltage,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn residuals(
+        &self,
+        plate_a_voltage: f32,
+        plate_b_voltage: f32,
+        cathode_voltage: f32,
+        grid_a_voltage: f32,
+        grid_b_voltage: f32,
+        input_a_voltage: f32,
+        input_b_voltage: f32,
+    ) -> [f32; 5] {
+        let plate_a_current = triode_current(
+            self.params.triode,
+            plate_a_voltage,
+            grid_a_voltage,
+            cathode_voltage,
+        );
+        let plate_b_current = triode_current(
+            self.params.triode,
+            plate_b_voltage,
+            grid_b_voltage,
+            cathode_voltage,
+        );
+        let grid_a_current = grid_current(grid_a_voltage, cathode_voltage);
+        let grid_b_current = grid_current(grid_b_voltage, cathode_voltage);
+        let tail_current = cathode_voltage / self.params.tail_resistance;
+        let input_a_coupling_current = self
+            .input_a_coupling
+            .current_at(grid_a_voltage, input_a_voltage);
+        let input_b_coupling_current = self
+            .input_b_coupling
+            .current_at(grid_b_voltage, input_b_voltage);
+        let grid_a_leak_current = grid_a_voltage / self.params.grid_leak_resistance;
+        let grid_b_leak_current = grid_b_voltage / self.params.grid_leak_resistance;
+
+        [
+            (self.params.nominal_supply_voltage - plate_a_voltage) / self.params.plate_a_resistance
+                - plate_a_current,
+            (self.params.nominal_supply_voltage - plate_b_voltage) / self.params.plate_b_resistance
+                - plate_b_current,
+            plate_a_current + plate_b_current + grid_a_current + grid_b_current - tail_current,
+            input_a_coupling_current + grid_a_leak_current + grid_a_current,
+            input_b_coupling_current + grid_b_leak_current + grid_b_current,
+        ]
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn jacobian(
+        &self,
+        plate_a_voltage: f32,
+        plate_b_voltage: f32,
+        cathode_voltage: f32,
+        grid_a_voltage: f32,
+        grid_b_voltage: f32,
+        input_a_voltage: f32,
+        input_b_voltage: f32,
+    ) -> [[f32; 5]; 5] {
+        let variables = [
+            plate_a_voltage,
+            plate_b_voltage,
+            cathode_voltage,
+            grid_a_voltage,
+            grid_b_voltage,
+        ];
+        let steps = [0.05, 0.05, 0.01, 0.01, 0.01];
+        let mut jacobian = [[0.0; 5]; 5];
+
+        for column in 0..5 {
+            let mut plus = variables;
+            let mut minus = variables;
+            plus[column] += steps[column];
+            minus[column] -= steps[column];
+            let plus_residuals = self.residuals(
+                plus[0],
+                plus[1],
+                plus[2],
+                plus[3],
+                plus[4],
+                input_a_voltage,
+                input_b_voltage,
+            );
+            let minus_residuals = self.residuals(
+                minus[0],
+                minus[1],
+                minus[2],
+                minus[3],
+                minus[4],
+                input_a_voltage,
+                input_b_voltage,
+            );
+            for row in 0..5 {
+                jacobian[row][column] =
+                    (plus_residuals[row] - minus_residuals[row]) / (2.0 * steps[column]);
+            }
+        }
+
+        jacobian
+    }
+}
+
 struct CouplingCapacitor {
     conductance: f32,
     previous_voltage: f32,
@@ -527,6 +812,48 @@ fn solve_3x3(mut matrix: [[f32; 3]; 3], mut rhs: [f32; 3]) -> Option<[f32; 3]> {
     Some(solution)
 }
 
+fn solve_5x5(mut matrix: [[f32; 5]; 5], mut rhs: [f32; 5]) -> Option<[f32; 5]> {
+    for pivot in 0..5 {
+        let mut pivot_row = pivot;
+        let mut pivot_abs = matrix[pivot][pivot].abs();
+        for (row, values) in matrix.iter().enumerate().skip(pivot + 1) {
+            let candidate_abs = values[pivot].abs();
+            if candidate_abs > pivot_abs {
+                pivot_abs = candidate_abs;
+                pivot_row = row;
+            }
+        }
+
+        if pivot_abs < 1e-12 {
+            return None;
+        }
+
+        if pivot_row != pivot {
+            matrix.swap(pivot, pivot_row);
+            rhs.swap(pivot, pivot_row);
+        }
+
+        for row in (pivot + 1)..5 {
+            let factor = matrix[row][pivot] / matrix[pivot][pivot];
+            for column in pivot..5 {
+                matrix[row][column] -= factor * matrix[pivot][column];
+            }
+            rhs[row] -= factor * rhs[pivot];
+        }
+    }
+
+    let mut solution = [0.0; 5];
+    for row in (0..5).rev() {
+        let mut sum = rhs[row];
+        for (column, value) in solution.iter().enumerate().skip(row + 1) {
+            sum -= matrix[row][column] * value;
+        }
+        solution[row] = sum / matrix[row][row];
+    }
+
+    Some(solution)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,6 +884,21 @@ mod tests {
             nominal_supply_voltage: 280.0,
             input_gain: 1.0,
             output_scale: 1.0,
+            triode: TriodeParams::ECC83,
+        })
+    }
+
+    fn long_tail_pair() -> LongTailPairStage {
+        LongTailPairStage::new(LongTailPairParams {
+            sample_rate: 48_000.0,
+            grid_leak_resistance: 1_000_000.0,
+            input_coupling_capacitance: 47e-9,
+            plate_a_resistance: 100_000.0,
+            plate_b_resistance: 82_000.0,
+            tail_resistance: 10_000.0,
+            nominal_supply_voltage: 300.0,
+            input_gain: 1.0,
+            output_scale: 0.018,
             triode: TriodeParams::ECC83,
         })
     }
@@ -746,6 +1088,84 @@ mod tests {
         );
     }
 
+    #[test]
+    fn long_tail_pair_biases_to_shared_tail_operating_point() {
+        let mut pair = long_tail_pair();
+        for _ in 0..2048 {
+            assert!(pair.process(0.0).is_finite());
+        }
+
+        let operating_point = pair.operating_point();
+        assert!(operating_point.plate_a_voltage.is_finite());
+        assert!(operating_point.plate_b_voltage.is_finite());
+        assert!(operating_point.cathode_voltage.is_finite());
+        assert!(
+            (1.0..120.0).contains(&operating_point.cathode_voltage),
+            "{operating_point:?}"
+        );
+        assert!(
+            (20.0..295.0).contains(&operating_point.plate_a_voltage),
+            "{operating_point:?}"
+        );
+        assert!(
+            (20.0..295.0).contains(&operating_point.plate_b_voltage),
+            "{operating_point:?}"
+        );
+    }
+
+    #[test]
+    fn long_tail_pair_plates_move_in_opposite_directions() {
+        let mut pair = long_tail_pair();
+        settle_pair_idle(&mut pair);
+        let idle = pair.operating_point();
+
+        pair.process(0.020);
+        let driven = pair.operating_point();
+        let plate_a_delta = driven.plate_a_voltage - idle.plate_a_voltage;
+        let plate_b_delta = driven.plate_b_voltage - idle.plate_b_voltage;
+
+        assert!(
+            plate_a_delta * plate_b_delta < 0.0,
+            "idle={idle:?}, driven={driven:?}, da={plate_a_delta}, db={plate_b_delta}"
+        );
+    }
+
+    #[test]
+    fn long_tail_pair_small_signal_has_gain_and_balance() {
+        let mut pair = long_tail_pair();
+        settle_pair_idle(&mut pair);
+        let response = pair_node_rms(&mut pair, 1_000.0, 0.020);
+        let input_rms = 0.020 / std::f32::consts::SQRT_2;
+        let gain = response.differential / input_rms;
+        let plate_ratio = response.plate_a / response.plate_b;
+
+        assert!(gain > 8.0, "response={response:?}, gain={gain}");
+        assert!(
+            (0.35..2.40).contains(&plate_ratio),
+            "response={response:?}, plate_ratio={plate_ratio}"
+        );
+    }
+
+    #[test]
+    fn long_tail_pair_recovers_from_grid_current_blocking() {
+        let mut pair = long_tail_pair();
+        for sample_idx in 0..12_000 {
+            let input = (std::f32::consts::TAU * 110.0 * sample_idx as f32 / 48_000.0).sin() * 3.0;
+            pair.process(input);
+        }
+        let overloaded_grid = pair.operating_point().grid_a_voltage;
+
+        for _ in 0..48_000 {
+            pair.process(0.0);
+        }
+        let recovered_grid = pair.operating_point().grid_a_voltage;
+
+        assert!(
+            recovered_grid.abs() < overloaded_grid.abs(),
+            "overloaded_grid={overloaded_grid}, recovered_grid={recovered_grid}"
+        );
+    }
+
     struct NodeRms {
         grid: f32,
         plate: f32,
@@ -814,6 +1234,40 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct PairNodeRms {
+        plate_a: f32,
+        plate_b: f32,
+        differential: f32,
+    }
+
+    fn pair_node_rms(
+        stage: &mut LongTailPairStage,
+        frequency: f32,
+        amplitude: f32,
+    ) -> PairNodeRms {
+        let mut plate_a_samples = Vec::new();
+        let mut plate_b_samples = Vec::new();
+        let mut differential_samples = Vec::new();
+        for sample_idx in 0..24_000 {
+            let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / 48_000.0).sin()
+                * amplitude;
+            stage.process(input);
+            if sample_idx >= 12_000 {
+                let operating_point = stage.operating_point();
+                plate_a_samples.push(operating_point.plate_a_voltage);
+                plate_b_samples.push(operating_point.plate_b_voltage);
+                differential_samples
+                    .push(operating_point.plate_b_voltage - operating_point.plate_a_voltage);
+            }
+        }
+        PairNodeRms {
+            plate_a: rms(&plate_a_samples),
+            plate_b: rms(&plate_b_samples),
+            differential: rms(&differential_samples),
+        }
+    }
+
     fn rms(samples: &[f32]) -> f32 {
         let mean = samples.iter().sum::<f32>() / samples.len() as f32;
         (samples
@@ -825,6 +1279,12 @@ mod tests {
             .sum::<f32>()
             / samples.len() as f32)
             .sqrt()
+    }
+
+    fn settle_pair_idle(stage: &mut LongTailPairStage) {
+        for _ in 0..96_000 {
+            stage.process(0.0);
+        }
     }
 
     fn assert_close(actual: f32, expected: f32, tolerance: f32, label: &str) {

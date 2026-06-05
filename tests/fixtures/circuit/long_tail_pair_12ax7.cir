@@ -1,0 +1,43 @@
+* ECC83/12AX7 long-tail-pair phase inverter matching core/src/circuit/triode.rs.
+* Run with: ngspice -b long_tail_pair_12ax7.cir
+
+.param BRAW=300
+
+VRAW bplus 0 DC {BRAW}
+
+VIN in 0 SIN(0 20m 1k)
+CINA in grida 47n
+RGRIDA grida 0 1Meg
+
+VINB inb 0 DC 0
+CINB inb gridb 47n
+RGRIDB gridb 0 1Meg
+
+RPLATEA bplus platea 100k
+RPLATEB bplus plateb 82k
+RTAIL cath 0 10k
+XTRIODEA platea grida cath 12AX7_KOREN
+XTRIODEB plateb gridb cath 12AX7_KOREN
+
+.save v(in) v(grida) v(gridb) v(platea) v(plateb) v(cath) v(bplus) i(VRAW)
+
+.control
+set filetype=ascii
+op
+print v(platea) v(plateb) v(cath) v(grida) v(gridb) v(bplus)
+tran 1u 100m 0 1u
+wrdata /tmp/voxbox_long_tail_pair_12ax7.dat v(in) v(grida) v(gridb) v(platea) v(plateb) v(cath) v(bplus)
+quit
+.endc
+
+* Koren-style triode approximation shared by the circuit fixtures.
+.subckt 12AX7_KOREN P G K
+.param MU=100 EX=1.4 KG1=1060 KP=600 KVB=300
+E1 n1 0 VALUE={ln(1 + exp(KP * (1 / MU + V(G,K) / max(V(P,K), 1)))) / KP}
+G1 P K VALUE={(V(P,K) / KG1) * pow(max(V(n1), 0), EX) * sqrt(max(V(P,K), 0) / KVB)}
+Cpk P K 1.7p
+Cgp G P 1.6p
+Cgk G K 1.6p
+.ends 12AX7_KOREN
+
+.end

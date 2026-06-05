@@ -45,3 +45,25 @@ Current 1 kHz transient reference with 20 mV sine input:
 - grid RMS: 14.14 mV
 - cathode RMS after DC removal: 11.79 mV
 - cathode gain: 0.834x
+
+`long_tail_pair_12ax7.cir` validates the shared-cathode phase-inverter cell. It
+writes transient data to `/tmp/voxbox_long_tail_pair_12ax7.dat`.
+
+Current ngspice long-tail-pair DC operating point:
+
+- plate A: 290.37 V
+- plate B: 291.94 V
+- cathode/tail: 1.95 V
+- grid A: 0.00 V
+- grid B: 0.00 V
+- B+: 300.00 V
+
+Current 1 kHz transient reference with 20 mV sine input on grid A:
+
+- input RMS: 14.14 mV
+- grid A RMS: 14.14 mV
+- grid B RMS: 0.002 mV
+- plate A RMS after DC removal: 97.90 mV
+- plate B RMS after DC removal: 41.77 mV
+- differential plate RMS after DC removal: 139.67 mV
+- differential gain: 9.88x

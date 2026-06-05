@@ -1,11 +1,11 @@
 use super::AmpModel;
 use crate::amp::components::{
-    el84_bank, triode_stage, OnePoleLowpass, SupplyNode, TopBoostToneStack, WdfHighpass,
+    el84_bank, OnePoleLowpass, SupplyNode, TopBoostToneStack, WdfHighpass,
 };
 use crate::amp::AmpControls;
 use crate::circuit::triode::{
     CathodeFollowerParams, CathodeFollowerStage, CommonCathodeParams, CommonCathodeStage,
-    TriodeParams,
+    LongTailPairParams, LongTailPairStage, TriodeParams,
 };
 
 pub(in crate::amp) struct Nox {
@@ -18,6 +18,7 @@ pub(in crate::amp) struct Nox {
     recovery_stage: CommonCathodeStage,
     tone_stack: TopBoostToneStack,
     phase_inverter_coupling: WdfHighpass,
+    phase_inverter: LongTailPairStage,
     cut_filter: OnePoleLowpass,
     transformer_highpass: WdfHighpass,
     transformer_lowpass: OnePoleLowpass,
@@ -36,6 +37,7 @@ impl Nox {
             recovery_stage: CommonCathodeStage::new(recovery_stage_params(sample_rate)),
             tone_stack: TopBoostToneStack::new(sample_rate),
             phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
+            phase_inverter: LongTailPairStage::new(phase_inverter_params(sample_rate)),
             cut_filter: OnePoleLowpass::new(sample_rate, 12_000.0),
             transformer_highpass: WdfHighpass::from_rc(sample_rate, 100_000.0, 47e-9),
             transformer_lowpass: OnePoleLowpass::new(sample_rate, 13_000.0),
@@ -77,10 +79,8 @@ impl AmpModel for Nox {
 
         let pi_input = self
             .phase_inverter_coupling
-            .process(driven_tone * 4.6 * preamp_voltage);
-        let phase_a = triode_stage(pi_input * 1.34, 0.040 * preamp_voltage);
-        let phase_b = triode_stage(-pi_input * 1.30, -0.032 * preamp_voltage);
-        let differential = (phase_a - phase_b) * 0.5;
+            .process(driven_tone * 2.8 * preamp_voltage);
+        let differential = self.phase_inverter.process(pi_input);
 
         let cut_hz = 13_500.0 * (1.0 - controls.cut).powi(2) + 1_150.0;
         self.cut_filter.set_cutoff(self.sample_rate, cut_hz);
@@ -163,6 +163,21 @@ fn recovery_stage_params(sample_rate: f32) -> CommonCathodeParams {
         nominal_supply_voltage: 280.0,
         input_gain: 1.0,
         output_scale: 0.12,
+        triode: TriodeParams::ECC83,
+    }
+}
+
+fn phase_inverter_params(sample_rate: f32) -> LongTailPairParams {
+    LongTailPairParams {
+        sample_rate,
+        grid_leak_resistance: 1_000_000.0,
+        input_coupling_capacitance: 47e-9,
+        plate_a_resistance: 100_000.0,
+        plate_b_resistance: 82_000.0,
+        tail_resistance: 10_000.0,
+        nominal_supply_voltage: 300.0,
+        input_gain: 1.0,
+        output_scale: 0.018,
         triode: TriodeParams::ECC83,
     }
 }

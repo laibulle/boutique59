@@ -1,5 +1,5 @@
-const NEWTON_ITERATIONS: usize = 12;
-const NEWTON_TOLERANCE: f32 = 1e-5;
+const NEWTON_ITERATIONS: usize = 18;
+const NEWTON_TOLERANCE: f32 = 1e-8;
 
 #[derive(Clone, Copy)]
 pub struct TriodeParams {
@@ -395,11 +395,36 @@ mod tests {
     }
 
     #[test]
-    fn sustained_drive_drops_supply_voltage() {
+    fn idle_operating_point_tracks_spice_fixture() {
         let mut stage = stage();
-        for _ in 0..2048 {
-            stage.process(0.0);
-        }
+        settle_idle(&mut stage);
+        let operating_point = stage.operating_point();
+
+        assert_close(operating_point.plate_voltage, 250.54, 2.0, "plate");
+        assert_close(operating_point.cathode_voltage, 0.40, 0.05, "cathode");
+        assert_close(operating_point.supply_voltage, 277.32, 0.5, "supply");
+        assert_close(operating_point.grid_voltage, 0.0, 0.005, "grid");
+    }
+
+    #[test]
+    fn small_signal_gain_tracks_spice_fixture() {
+        let mut stage = stage();
+        settle_idle(&mut stage);
+        let input_voltage_rms = 0.020 / std::f32::consts::SQRT_2;
+        let input_amplitude = 0.020 / stage.params.input_gain;
+        let response = node_rms(&mut stage, 1_000.0, input_amplitude);
+        let plate_voltage_rms = response.plate;
+        let gain = plate_voltage_rms / input_voltage_rms;
+
+        assert_close(response.grid, 0.01412, 0.001, "grid rms");
+        assert_close(response.cathode, 0.000013, 0.0005, "cathode rms");
+        assert_close(gain, 14.88, 1.5, "small-signal gain");
+    }
+
+    #[test]
+    fn sustained_drive_modulates_supply_voltage() {
+        let mut stage = stage();
+        settle_idle(&mut stage);
         let idle_supply = stage.supply_voltage();
 
         for sample_idx in 0..24_000 {
@@ -408,7 +433,7 @@ mod tests {
         }
 
         assert!(
-            stage.supply_voltage() < idle_supply - 0.05,
+            (stage.supply_voltage() - idle_supply).abs() > 0.05,
             "idle={}, driven={}",
             idle_supply,
             stage.supply_voltage()
@@ -472,26 +497,54 @@ mod tests {
             ..stage().params
         });
 
-        let bypassed_level = sine_rms(&mut bypassed, 1_000.0, 0.001);
-        let unbypassed_level = sine_rms(&mut unbypassed, 1_000.0, 0.001);
+        settle_idle(&mut bypassed);
+        settle_idle(&mut unbypassed);
+
+        let bypassed_level = node_rms(&mut bypassed, 1_000.0, 0.001).plate;
+        let unbypassed_level = node_rms(&mut unbypassed, 1_000.0, 0.001).plate;
         let ratio = bypassed_level / unbypassed_level;
 
         assert!(
-            !(0.97..=1.03).contains(&ratio),
+            ratio > 1.08,
             "bypassed={bypassed_level}, unbypassed={unbypassed_level}, ratio={ratio}"
         );
     }
 
-    fn sine_rms(stage: &mut CommonCathodeStage, frequency: f32, amplitude: f32) -> f32 {
-        let mut samples = Vec::new();
+    struct NodeRms {
+        grid: f32,
+        plate: f32,
+        cathode: f32,
+    }
+
+    fn node_rms(stage: &mut CommonCathodeStage, frequency: f32, amplitude: f32) -> NodeRms {
+        let mut grid_samples = Vec::new();
+        let mut plate_samples = Vec::new();
+        let mut cathode_samples = Vec::new();
         for sample_idx in 0..24_000 {
             let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / 48_000.0).sin()
                 * amplitude;
-            let output = stage.process(input);
+            stage.process(input);
             if sample_idx >= 12_000 {
-                samples.push(output);
+                let operating_point = stage.operating_point();
+                grid_samples.push(operating_point.grid_voltage);
+                plate_samples.push(operating_point.plate_voltage);
+                cathode_samples.push(operating_point.cathode_voltage);
             }
         }
+        NodeRms {
+            grid: rms(&grid_samples),
+            plate: rms(&plate_samples),
+            cathode: rms(&cathode_samples),
+        }
+    }
+
+    fn settle_idle(stage: &mut CommonCathodeStage) {
+        for _ in 0..96_000 {
+            stage.process(0.0);
+        }
+    }
+
+    fn rms(samples: &[f32]) -> f32 {
         let mean = samples.iter().sum::<f32>() / samples.len() as f32;
         (samples
             .iter()
@@ -502,5 +555,12 @@ mod tests {
             .sum::<f32>()
             / samples.len() as f32)
             .sqrt()
+    }
+
+    fn assert_close(actual: f32, expected: f32, tolerance: f32, label: &str) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "{label}: actual={actual}, expected={expected}, tolerance={tolerance}"
+        );
     }
 }

@@ -310,10 +310,6 @@ impl SupplyNode {
         }
     }
 
-    pub(super) fn reset(&mut self) {
-        self.voltage = self.nominal_voltage;
-    }
-
     #[inline]
     pub(super) fn process(&mut self, current_draw: f32) -> f32 {
         let target = self.nominal_voltage - current_draw.max(0.0) * self.resistance;

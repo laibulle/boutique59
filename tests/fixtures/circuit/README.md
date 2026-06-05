@@ -16,3 +16,16 @@ to `/tmp/voxbox_common_cathode_12ax7.dat`. Use it to compare:
 The Rust model should eventually load measured or simulated operating points
 from these fixtures in regression tests. For now, this file documents the
 electrical target while the in-process solver is still evolving.
+
+Current ngspice DC operating point:
+
+- plate: 250.54 V
+- cathode: 0.40 V
+- B+: 277.32 V
+- grid: 0.00 V
+
+Current 1 kHz transient reference with 20 mV sine input:
+
+- input RMS: 14.14 mV
+- plate RMS after DC removal: 210.43 mV
+- plate gain: 14.88x

@@ -178,14 +178,16 @@ fn power_stage_params(sample_rate: f32) -> PushPullEl84Params {
     PushPullEl84Params {
         sample_rate,
         nominal_supply_voltage: 320.0,
+        screen_voltage: 300.0,
+        primary_half_resistance: 3_200.0,
         supply_resistance: 360.0,
         supply_capacitance: 32e-6,
         cathode_resistance: 130.0,
         cathode_capacitance: 50e-6,
         idle_current: 0.040,
-        drive_gain: 1.58,
-        current_gain: 0.92,
+        drive_gain: 18.0,
+        current_gain: 0.0048,
         compression: 0.22,
-        output_scale: 36.0,
+        output_scale: 0.020,
     }
 }

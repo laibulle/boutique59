@@ -24,6 +24,7 @@ pub struct VoxAmp {
     upsampler: FirFilter,
     core: AmpCore,
     downsampler: FirFilter,
+    oversampled: bool,
 }
 
 impl VoxAmp {
@@ -33,10 +34,17 @@ impl VoxAmp {
 
     pub fn with_model(sample_rate: f32, model: &str) -> Self {
         let coefficients = half_band_coefficients();
+        let oversampled = !matches!(model, "nox");
+        let core_sample_rate = if oversampled {
+            sample_rate * OVERSAMPLING_FACTOR
+        } else {
+            sample_rate
+        };
         Self {
             upsampler: FirFilter::new(coefficients),
-            core: AmpCore::new_with_model(sample_rate * OVERSAMPLING_FACTOR, model),
+            core: AmpCore::new_with_model(core_sample_rate, model),
             downsampler: FirFilter::new(coefficients),
+            oversampled,
         }
     }
 
@@ -48,6 +56,10 @@ impl VoxAmp {
 
     #[inline]
     pub fn process(&mut self, input: f32, controls: AmpControls) -> f32 {
+        if !self.oversampled {
+            return self.core.process(input, controls);
+        }
+
         let upsampled = self.upsampler.process(input * OVERSAMPLING_FACTOR);
         let output = self
             .downsampler

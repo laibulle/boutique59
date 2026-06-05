@@ -1,4 +1,4 @@
-const NEWTON_ITERATIONS: usize = 18;
+const NEWTON_ITERATIONS: usize = 8;
 const NEWTON_TOLERANCE: f32 = 1e-8;
 
 #[derive(Clone, Copy)]

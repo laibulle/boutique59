@@ -17,7 +17,6 @@ DESKTOP :=target/release/voxbox-desktop
 build:
 	cargo build --release
 
-
 standalone: build
 	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \

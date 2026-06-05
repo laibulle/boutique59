@@ -5,5 +5,6 @@
 //! Newton-solved triode stage with supply interaction; future cells can replace
 //! analytic nonlinearities with WDF or Neural WDF scattering relations.
 
+pub mod passive;
 pub mod power;
 pub mod triode;

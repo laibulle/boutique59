@@ -1,6 +1,7 @@
 use super::AmpModel;
 use crate::amp::components::{OnePoleLowpass, TopBoostToneStack, WdfHighpass};
 use crate::amp::AmpControls;
+use crate::circuit::passive::{BrightVolumeInputParams, BrightVolumeInputStage};
 use crate::circuit::power::{
     OutputTransformerParams, OutputTransformerStage, PushPullEl84Params, PushPullEl84Stage,
 };
@@ -11,8 +12,7 @@ use crate::circuit::triode::{
 
 pub(in crate::amp) struct Nox {
     sample_rate: f32,
-    input_coupling: WdfHighpass,
-    bright_filter: OnePoleLowpass,
+    input_volume: BrightVolumeInputStage,
     first_stage: CommonCathodeStage,
     follower: CathodeFollowerStage,
     drive_stage: CommonCathodeStage,
@@ -29,8 +29,7 @@ impl Nox {
     pub(super) fn new(sample_rate: f32) -> Self {
         Self {
             sample_rate,
-            input_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
-            bright_filter: OnePoleLowpass::new(sample_rate, 2_900.0),
+            input_volume: BrightVolumeInputStage::new(input_volume_params(sample_rate)),
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
             follower: CathodeFollowerStage::new(follower_params(sample_rate)),
             drive_stage: CommonCathodeStage::new(drive_stage_params(sample_rate)),
@@ -52,11 +51,7 @@ impl AmpModel for Nox {
 
     #[inline]
     fn process(&mut self, input: f32, controls: AmpControls) -> f32 {
-        let input = self.input_coupling.process(input);
-
-        let volume = controls.volume * controls.volume;
-        let high = input - self.bright_filter.process(input);
-        let volume_output = input * volume + high * (1.0 - volume) * 0.18;
+        let volume_output = self.input_volume.process(input, controls.volume);
 
         let first_stage = self.first_stage.process(volume_output);
         let preamp_voltage = self.first_stage.operating_point().supply_voltage / 280.0;
@@ -89,6 +84,16 @@ impl AmpModel for Nox {
 
         let power_output = self.power_stage.process(voiced_output, controls.sag);
         self.output_transformer.process(power_output) * controls.output
+    }
+}
+
+fn input_volume_params(sample_rate: f32) -> BrightVolumeInputParams {
+    BrightVolumeInputParams {
+        sample_rate,
+        input_resistance: 1_000_000.0,
+        input_coupling_capacitance: 47e-9,
+        bright_cutoff_hz: 2_900.0,
+        bright_bypass_gain: 0.18,
     }
 }
 

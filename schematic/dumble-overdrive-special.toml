@@ -34,6 +34,11 @@ cathode_resistor_ohms = 1500
 cathode_bypass_cap_uf = 25
 model = "recovery stage providing buffer drive to the phase inverter and the lead/clean blend"
 
+[overdrive_stage]
+tube = "12AX7 / ECC83"
+topology = "cascaded lead stages after the clean/tone path"
+model = "separate asymmetric overdrive path mixed with the clean recovery feed"
+
 [presence]
 location = "power amp negative feedback loop"
 pot_ohms = 50000

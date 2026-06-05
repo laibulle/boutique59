@@ -330,6 +330,13 @@ pub(super) fn el34_bank(input: f32) -> f32 {
     compressed_current.tanh()
 }
 
+#[inline]
+pub(super) fn six_l6_bank(input: f32) -> f32 {
+    let conducting = (input + 0.10).max(0.0);
+    let compressed_current = conducting * 0.98 / (1.0 + conducting * 0.12);
+    compressed_current.tanh()
+}
+
 pub(super) struct OnePoleLowpass {
     coefficient: f32,
     cutoff: f32,

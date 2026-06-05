@@ -192,6 +192,39 @@ mod tests {
     }
 
     #[test]
+    fn dumble_model_has_distinct_overdrive_path() {
+        let mut controls = controls();
+        controls.volume = 0.72;
+        controls.bass = 0.55;
+        controls.treble = 0.60;
+        controls.cut = 0.55;
+        controls.drive = 0.75;
+        controls.presence = 0.35;
+
+        let mut ac30 = VoxAmp::new(48_000.0);
+        let mut dumble = VoxAmp::with_model(48_000.0, "dumble");
+        let mut ac30_sum = 0.0;
+        let mut dumble_sum = 0.0;
+        let mut difference_sum = 0.0;
+
+        for sample_idx in 0..4_096 {
+            let input = (std::f32::consts::TAU * 220.0 * sample_idx as f32 / 48_000.0).sin()
+                * (0.08 + 0.16 * (sample_idx % 257 == 0) as u8 as f32);
+            let ac30_output = ac30.process(input, controls);
+            let dumble_output = dumble.process(input, controls);
+            if sample_idx >= 1_024 {
+                ac30_sum += ac30_output * ac30_output;
+                dumble_sum += dumble_output * dumble_output;
+                let difference = ac30_output - dumble_output;
+                difference_sum += difference * difference;
+            }
+        }
+
+        assert!(dumble_sum.is_finite());
+        assert!(difference_sum > (ac30_sum + dumble_sum) * 0.05);
+    }
+
+    #[test]
     fn bass_control_changes_low_frequency_response() {
         let mut low_bass = controls();
         low_bass.bass = 0.0;

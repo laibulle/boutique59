@@ -29,3 +29,19 @@ Current 1 kHz transient reference with 20 mV sine input:
 - input RMS: 14.14 mV
 - plate RMS after DC removal: 210.43 mV
 - plate gain: 14.88x
+
+`cathode_follower_12ax7.cir` validates the follower cell. It writes transient
+data to `/tmp/voxbox_cathode_follower_12ax7.dat`.
+
+Current ngspice cathode-follower DC operating point:
+
+- grid: 0.00 V
+- cathode: 2.63 V
+- B+: 280.00 V
+
+Current 1 kHz transient reference with 20 mV sine input:
+
+- input RMS: 14.14 mV
+- grid RMS: 14.14 mV
+- cathode RMS after DC removal: 11.79 mV
+- cathode gain: 0.834x

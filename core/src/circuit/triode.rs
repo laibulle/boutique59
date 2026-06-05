@@ -694,22 +694,35 @@ mod tests {
         }
 
         let operating_point = follower.operating_point();
-        assert!(operating_point.cathode_voltage > 0.2);
-        assert!(operating_point.cathode_voltage < operating_point.supply_voltage);
-        assert!(operating_point.grid_voltage.abs() < 0.01);
+        assert_close(operating_point.grid_voltage, 0.0, 0.005, "follower grid");
+        assert_close(
+            operating_point.cathode_voltage,
+            2.63,
+            0.10,
+            "follower cathode",
+        );
+        assert_close(
+            operating_point.supply_voltage,
+            280.0,
+            0.01,
+            "follower supply",
+        );
     }
 
     #[test]
-    fn cathode_follower_tracks_small_signal_below_unity() {
+    fn cathode_follower_small_signal_tracks_spice_fixture() {
         let mut follower = follower();
         settle_follower_idle(&mut follower);
-        let response = follower_rms(&mut follower, 1_000.0, 0.020);
+        let response = follower_node_rms(&mut follower, 1_000.0, 0.020);
         let input_rms = 0.020 / std::f32::consts::SQRT_2;
-        let gain = response / input_rms;
+        let gain = response.cathode / input_rms;
 
+        assert_close(response.grid, 0.01414, 0.001, "follower grid rms");
+        assert_close(response.cathode, 0.01179, 0.0015, "follower cathode rms");
         assert!(
-            (0.65..0.99).contains(&gain),
-            "response={response}, input_rms={input_rms}, gain={gain}"
+            (0.78..0.89).contains(&gain),
+            "response={}, input_rms={input_rms}, gain={gain}",
+            response.cathode
         );
     }
 
@@ -773,17 +786,32 @@ mod tests {
         }
     }
 
-    fn follower_rms(stage: &mut CathodeFollowerStage, frequency: f32, amplitude: f32) -> f32 {
-        let mut samples = Vec::new();
+    struct FollowerNodeRms {
+        grid: f32,
+        cathode: f32,
+    }
+
+    fn follower_node_rms(
+        stage: &mut CathodeFollowerStage,
+        frequency: f32,
+        amplitude: f32,
+    ) -> FollowerNodeRms {
+        let mut grid_samples = Vec::new();
+        let mut cathode_samples = Vec::new();
         for sample_idx in 0..24_000 {
             let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / 48_000.0).sin()
                 * amplitude;
-            let output = stage.process(input);
+            stage.process(input);
             if sample_idx >= 12_000 {
-                samples.push(output);
+                let operating_point = stage.operating_point();
+                grid_samples.push(operating_point.grid_voltage);
+                cathode_samples.push(operating_point.cathode_voltage);
             }
         }
-        rms(&samples)
+        FollowerNodeRms {
+            grid: rms(&grid_samples),
+            cathode: rms(&cathode_samples),
+        }
     }
 
     fn rms(samples: &[f32]) -> f32 {

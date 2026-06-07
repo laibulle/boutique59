@@ -44,11 +44,18 @@ struct Row {
     split: String,
     kind: String,
     samples: usize,
+    aligned_samples: usize,
     reference_rms_v: f64,
     rmse_v: f64,
     mae_v: f64,
     max_abs_error_v: f64,
     relative_rmse: f64,
+    latency_samples: isize,
+    latency_us: f64,
+    optimal_gain: f64,
+    optimal_gain_db: f64,
+    aligned_rmse_v: f64,
+    aligned_relative_rmse: f64,
     zero_baseline_rmse_v: f64,
 }
 
@@ -75,7 +82,13 @@ fn main() -> Result<()> {
             args.stride,
         )?);
     }
-    write_report(&args.report, &args.manifest, &rows, args.stride, &args.split)?;
+    write_report(
+        &args.report,
+        &args.manifest,
+        &rows,
+        args.stride,
+        &args.split,
+    )?;
     println!("wrote {}", args.report.display());
     Ok(())
 }
@@ -174,16 +187,32 @@ fn evaluate_stimulus(
     let rmse = rms(&errors);
     let mae = errors.iter().map(|value| value.abs()).sum::<f64>() / errors.len() as f64;
     let max_abs = errors.iter().map(|value| value.abs()).fold(0.0, f64::max);
+    let alignment = best_gain_latency_alignment(
+        &candidate
+            .iter()
+            .map(|value| *value as f64)
+            .collect::<Vec<_>>(),
+        &reference_f64,
+        manifest.sample_rate_hz,
+        stride,
+    )?;
     Ok(Row {
         stimulus_id: stimulus.id.clone(),
         split: split.to_string(),
         kind: stimulus.kind.clone(),
         samples: reference.len(),
+        aligned_samples: alignment.samples,
         reference_rms_v: reference_rms,
         rmse_v: rmse,
         mae_v: mae,
         max_abs_error_v: max_abs,
         relative_rmse: rmse / reference_rms.max(1.0e-12),
+        latency_samples: alignment.latency_samples,
+        latency_us: alignment.latency_us,
+        optimal_gain: alignment.gain,
+        optimal_gain_db: linear_to_db(alignment.gain.abs().max(1.0e-12)),
+        aligned_rmse_v: alignment.rmse_v,
+        aligned_relative_rmse: alignment.rmse_v / alignment.reference_rms_v.max(1.0e-12),
         zero_baseline_rmse_v: reference_rms,
     })
 }
@@ -229,16 +258,23 @@ fn write_report(
         .iter()
         .map(|row| {
             format!(
-                "| `{}` | `{}` | `{}` | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2}% | {:.3} |",
+                "| `{}` | `{}` | `{}` | {} | {} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2}% | {} | {:.1} | {:.4} | {:.2} | {:.3} | {:.2}% | {:.3} |",
                 row.stimulus_id,
                 row.split,
                 row.kind,
                 row.samples,
+                row.aligned_samples,
                 row.reference_rms_v * 1000.0,
                 row.rmse_v * 1000.0,
                 row.mae_v * 1000.0,
                 row.max_abs_error_v * 1000.0,
                 row.relative_rmse * 100.0,
+                row.latency_samples,
+                row.latency_us,
+                row.optimal_gain,
+                row.optimal_gain_db,
+                row.aligned_rmse_v * 1000.0,
+                row.aligned_relative_rmse * 100.0,
                 row.zero_baseline_rmse_v * 1000.0
             )
         })
@@ -274,12 +310,14 @@ stimulus before comparison with SPICE `plate_ac_v`.
 | Weighted RMSE | {:.3} mV |
 | Weighted MAE | {:.3} mV |
 | Weighted relative RMSE | {:.2}% |
+| Weighted aligned RMSE | {:.3} mV |
+| Weighted aligned relative RMSE | {:.2}% |
 | Zero baseline RMSE | {:.3} mV |
 
 ## Per-Stimulus Metrics
 
-| Stimulus | Split | Kind | Samples | Ref RMS mV | RMSE mV | MAE mV | Max abs mV | Rel RMSE | Zero baseline RMSE mV |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stimulus | Split | Kind | Samples | Aligned samples | Ref RMS mV | RMSE mV | MAE mV | Max abs mV | Rel RMSE | Best lag | Lag us | Gain | Gain dB | Aligned RMSE mV | Aligned Rel RMSE | Zero baseline RMSE mV |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 {}
 
 ## Interpretation
@@ -287,6 +325,16 @@ stimulus before comparison with SPICE `plate_ac_v`.
 This report is the first reference point for deciding whether a neural cell is
 actually better than the existing Rust analytic solver. A neural replacement
 should improve held-out stimuli, not merely beat a zero baseline.
+
+The aligned residual applies only a small integer-latency search and an optimal
+linear gain. If it drops far below the raw residual, the mismatch is dominated
+by timing or level calibration. If it remains close to the raw residual, the
+remaining error is more likely model shape, nonlinear transfer, bias dynamics,
+or discretization.
+
+This alignment is diagnostic, not a physical latency measurement. Periodic
+stimuli can produce phase-equivalent lags and negative gains, especially around
+single-frequency sine tests.
 "#,
             manifest_path.display(),
             split,
@@ -296,6 +344,8 @@ should improve held-out stimuli, not merely beat a zero baseline.
             aggregate.rmse_v * 1000.0,
             aggregate.mae_v * 1000.0,
             aggregate.relative_rmse * 100.0,
+            aggregate.aligned_rmse_v * 1000.0,
+            aggregate.aligned_relative_rmse * 100.0,
             aggregate.zero_baseline_rmse_v * 1000.0,
             table
         ),
@@ -308,6 +358,8 @@ struct Aggregate {
     rmse_v: f64,
     mae_v: f64,
     relative_rmse: f64,
+    aligned_rmse_v: f64,
+    aligned_relative_rmse: f64,
     zero_baseline_rmse_v: f64,
 }
 
@@ -319,6 +371,8 @@ fn aggregate(rows: &[Row]) -> Aggregate {
             rmse_v: 0.0,
             mae_v: 0.0,
             relative_rmse: 0.0,
+            aligned_rmse_v: 0.0,
+            aligned_relative_rmse: 0.0,
             zero_baseline_rmse_v: 0.0,
         };
     }
@@ -331,12 +385,15 @@ fn aggregate(rows: &[Row]) -> Aggregate {
     let rmse_v = weighted(|row| row.rmse_v.powi(2)).sqrt();
     let mae_v = weighted(|row| row.mae_v);
     let reference_rms_v = weighted(|row| row.reference_rms_v.powi(2)).sqrt();
+    let aligned_rmse_v = weighted(|row| row.aligned_rmse_v.powi(2)).sqrt();
     let zero_baseline_rmse_v = weighted(|row| row.zero_baseline_rmse_v.powi(2)).sqrt();
     Aggregate {
         samples,
         rmse_v,
         mae_v,
         relative_rmse: rmse_v / reference_rms_v.max(1.0e-12),
+        aligned_rmse_v,
+        aligned_relative_rmse: aligned_rmse_v / reference_rms_v.max(1.0e-12),
         zero_baseline_rmse_v,
     }
 }
@@ -349,7 +406,10 @@ fn resolve_path(manifest_path: &Path, path: &str) -> PathBuf {
     if path.exists() {
         return path;
     }
-    manifest_path.parent().unwrap_or_else(|| Path::new(".")).join(path)
+    manifest_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(path)
 }
 
 fn split_for<'a>(splits: &'a Splits, stimulus_id: &str) -> &'a str {
@@ -373,4 +433,83 @@ fn remove_mean(values: &mut [f32]) {
 
 fn rms(values: &[f64]) -> f64 {
     (values.iter().map(|value| value * value).sum::<f64>() / values.len() as f64).sqrt()
+}
+
+struct Alignment {
+    samples: usize,
+    latency_samples: isize,
+    latency_us: f64,
+    gain: f64,
+    rmse_v: f64,
+    reference_rms_v: f64,
+}
+
+fn best_gain_latency_alignment(
+    candidate: &[f64],
+    reference: &[f64],
+    sample_rate_hz: u32,
+    stride: usize,
+) -> Result<Alignment> {
+    if candidate.len() != reference.len() {
+        bail!("candidate/reference length mismatch");
+    }
+    let max_lag = 64usize.min(candidate.len().saturating_sub(1) / 4);
+    let mut best: Option<Alignment> = None;
+    for lag in -(max_lag as isize)..=(max_lag as isize) {
+        let (candidate_start, reference_start) = if lag >= 0 {
+            (lag as usize, 0usize)
+        } else {
+            (0usize, (-lag) as usize)
+        };
+        let length = (candidate.len() - candidate_start).min(reference.len() - reference_start);
+        if length < 8 {
+            continue;
+        }
+        let candidate_slice = &candidate[candidate_start..candidate_start + length];
+        let reference_slice = &reference[reference_start..reference_start + length];
+        let gain = optimal_gain(candidate_slice, reference_slice);
+        let residual = candidate_slice
+            .iter()
+            .zip(reference_slice.iter())
+            .map(|(candidate, reference)| candidate * gain - reference)
+            .collect::<Vec<_>>();
+        let rmse_v = rms(&residual);
+        let reference_rms_v = rms(reference_slice);
+        let alignment = Alignment {
+            samples: length,
+            latency_samples: lag,
+            latency_us: 1_000_000.0 * lag as f64 * stride as f64 / sample_rate_hz as f64,
+            gain,
+            rmse_v,
+            reference_rms_v,
+        };
+        if best
+            .as_ref()
+            .map(|current| alignment.rmse_v < current.rmse_v)
+            .unwrap_or(true)
+        {
+            best = Some(alignment);
+        }
+    }
+    best.context("latency alignment produced no valid overlap")
+}
+
+fn optimal_gain(candidate: &[f64], reference: &[f64]) -> f64 {
+    let denominator = candidate
+        .iter()
+        .map(|candidate| candidate * candidate)
+        .sum::<f64>();
+    if denominator <= 1.0e-18 {
+        return 1.0;
+    }
+    candidate
+        .iter()
+        .zip(reference.iter())
+        .map(|(candidate, reference)| candidate * reference)
+        .sum::<f64>()
+        / denominator
+}
+
+fn linear_to_db(value: f64) -> f64 {
+    20.0 * value.max(1.0e-12).log10()
 }

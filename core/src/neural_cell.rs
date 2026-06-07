@@ -72,13 +72,15 @@ impl ExperimentalNeuralCell {
         let path = path.as_ref();
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read neural-cell descriptor {}", path.display()))?;
-        let descriptor: Descriptor = json5::from_str(&text)
-            .with_context(|| format!("failed to parse neural-cell descriptor {}", path.display()))?;
+        let descriptor: Descriptor = json5::from_str(&text).with_context(|| {
+            format!("failed to parse neural-cell descriptor {}", path.display())
+        })?;
         Self::from_descriptor(&descriptor, path.parent().unwrap_or_else(|| Path::new(".")))
     }
 
     pub fn process_sample(&self, input_v: f32) -> f32 {
-        let mut values = vec![(input_v - self.normalization.input_mean) / self.normalization.input_std];
+        let mut values =
+            vec![(input_v - self.normalization.input_mean) / self.normalization.input_std];
         for (index, layer) in self.layers.iter().enumerate() {
             let mut next = vec![0.0; layer.out_features];
             for out_index in 0..layer.out_features {
@@ -128,7 +130,10 @@ impl ExperimentalNeuralCell {
             bail!("unsupported neural-cell activation '{}'", activation);
         }
         if descriptor.weights.format != "greybound-bin-v1" {
-            bail!("unsupported neural-cell weight format '{}'", descriptor.weights.format);
+            bail!(
+                "unsupported neural-cell weight format '{}'",
+                descriptor.weights.format
+            );
         }
         if descriptor.weights.dtype != "f32" || descriptor.weights.endianness != "little" {
             bail!(
@@ -142,7 +147,8 @@ impl ExperimentalNeuralCell {
         if layers.is_empty() {
             bail!("neural-cell has no layers");
         }
-        if layers[0].in_features != 1 || layers.last().is_some_and(|layer| layer.out_features != 1) {
+        if layers[0].in_features != 1 || layers.last().is_some_and(|layer| layer.out_features != 1)
+        {
             bail!("only scalar input/output neural cells are supported");
         }
         let normalization = Normalization {
@@ -151,7 +157,10 @@ impl ExperimentalNeuralCell {
             output_mean: descriptor.io.normalization.output_mean,
             output_std: nonzero_std(descriptor.io.normalization.output_std, "output_std")?,
         };
-        Ok(Self { layers, normalization })
+        Ok(Self {
+            layers,
+            normalization,
+        })
     }
 }
 
@@ -251,7 +260,8 @@ mod tests {
         )
         .unwrap();
 
-        let cell = ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
+        let cell =
+            ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
 
         assert_eq!(cell.process_sample(1.0), 10.0);
         assert_eq!(cell.process_sample(3.0), 14.0);
@@ -304,7 +314,8 @@ mod tests {
     }
 
     fn write_vector(file: &mut fs::File, values: &[f32]) {
-        file.write_all(&(values.len() as u32).to_le_bytes()).unwrap();
+        file.write_all(&(values.len() as u32).to_le_bytes())
+            .unwrap();
         for value in values {
             file.write_all(&value.to_le_bytes()).unwrap();
         }

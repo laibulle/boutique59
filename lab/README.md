@@ -145,7 +145,10 @@ make lab-evaluate-analytic-common-cathode NEURAL_STRIDE=32
 The current local analytic report shows about `80 mV` weighted RMSE versus about
 `245 mV` for the first static MLP. That means the neural artifact is useful for
 proving the pipeline, but it is not a better replacement than the current Rust
-cell.
+cell. A diagnostic gain/latency correction only reduces the analytic residual to
+about `70 mV`, so the remaining error is not mostly a trivial level or timing
+offset. Treat the residual as model-shape evidence: nonlinear transfer, bias
+dynamics, discretization, or fixture mismatch.
 
 Download public TONE3000 DI input WAV files for local NAM and Greybound
 integration tests:

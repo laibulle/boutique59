@@ -271,6 +271,15 @@ means the immediate research target is not runtime integration. The next useful
 work is to understand why the analytic stage still has residual error and only
 then decide whether a neural or fitted component improves the held-out cases.
 
+The analytic evaluator also reports a diagnostic residual after a small
+integer-latency search and optimal linear gain. The current weighted residual
+only moves from about `80 mV` to about `70 mV`, so the mismatch is not explained
+mostly by gain or latency. That points the next R&D loop toward model shape:
+nonlinear transfer, dynamic biasing, solver discretization, and exact fixture
+equivalence. The best-lag columns are diagnostic only; periodic sine stimuli can
+produce phase-equivalent lags and negative gains that should not be interpreted
+as physical circuit latency.
+
 ## NAM References
 
 NAM is used as an integration oracle, not as Greybound's internal architecture.

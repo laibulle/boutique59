@@ -307,7 +307,11 @@ milestone.
 The Rust analytic common-cathode baseline is evaluated through
 `make lab-evaluate-analytic-common-cathode`. The current analytic stage is
 stronger than the first MLP on the same dataset, so neural runtime integration is
-not justified yet.
+not justified yet. A diagnostic gain/latency correction only improves the
+analytic baseline from about `80 mV` weighted RMSE to about `70 mV`, which means
+the residual is not mostly a calibration offset. The next useful investigation is
+the model mismatch itself: transfer shape, bias dynamics, discretization, and
+fixture equivalence.
 
 Milestone 6: integration check
 

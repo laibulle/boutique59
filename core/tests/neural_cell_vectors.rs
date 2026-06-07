@@ -26,8 +26,10 @@ fn generated_neural_cell_vectors_match_rust_loader() {
     };
     let cell = ExperimentalNeuralCell::from_descriptor_path(&descriptor_path)
         .expect("failed to load generated neural-cell descriptor");
-    let text = fs::read_to_string(&vectors_path).expect("failed to read generated neural-cell vectors");
-    let vectors: VectorFile = json5::from_str(&text).expect("failed to parse generated neural-cell vectors");
+    let text =
+        fs::read_to_string(&vectors_path).expect("failed to read generated neural-cell vectors");
+    let vectors: VectorFile =
+        json5::from_str(&text).expect("failed to parse generated neural-cell vectors");
     assert!(
         !vectors.cases.is_empty(),
         "generated neural-cell vector file has no cases"
@@ -49,5 +51,7 @@ fn generated_neural_cell_vectors_match_rust_loader() {
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {
-    env::var_os(name).map(PathBuf::from).filter(|path| !path.as_os_str().is_empty())
+    env::var_os(name)
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
 }

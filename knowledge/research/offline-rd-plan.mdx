@@ -310,7 +310,9 @@ make lab-evaluate-analytic-common-cathode NEURAL_STRIDE=32
 The current local result is about `80 mV` weighted RMSE for the Rust analytic
 common-cathode stage, compared with about `245 mV` for the first MLP. Therefore
 the first neural artifact should not replace the analytic solver. It is a
-pipeline proof, and the next scientific step is residual analysis against SPICE.
+pipeline proof. A diagnostic gain/latency correction lowers the analytic
+residual only to about `70 mV`, so the next scientific step is model-shape
+analysis against SPICE rather than immediate runtime integration.
 
 Phase 4: first fitted micro-model
 

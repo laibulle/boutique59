@@ -8,7 +8,7 @@ Rig files describe the musical rig, not the runtime session. They should not con
 Runtime stays in CLI flags:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 ## Format
@@ -51,7 +51,7 @@ Rig files use JSON5 so they can keep JSON-like structure while supporting commen
   },
 
   cab: {
-    ir: "tone3000-celestion",
+    ir: "lab/references/tone3000-irs/celestion.wav",
     bypassed: false,
   },
 }
@@ -67,8 +67,8 @@ Rig files use JSON5 so they can keep JSON-like structure while supporting commen
 - `*.bypassed`: explicit activation state for pedal slots, `amp`, and `cab`. Use `false` for active and `true` for bypassed.
 - `amp.model`: `nox30`, `dumbler`, or `sheriff800`.
 - `amp.controls`: normalized `0.0..1.0` amp controls.
-- `cab.ir`: currently `tone3000-celestion`.
-- `cab.bypassed`: whether the embedded speaker IR starts bypassed.
+- `cab.ir`: path to a mono WAV impulse response matching the runtime sample rate.
+- `cab.bypassed`: whether the configured speaker IR starts bypassed.
 
 Supported device ids:
 

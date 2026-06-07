@@ -157,7 +157,7 @@
   },
 
   cab: {
-    ir: "tone3000-celestion",
+    ir: "lab/references/tone3000-irs/celestion.wav",
     bypassed: false,
   },
 }

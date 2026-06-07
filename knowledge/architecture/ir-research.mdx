@@ -3,13 +3,13 @@ title: IR Research Notes
 description: Research references for improving Greybound impulse-response rendering beyond static speaker convolution.
 ---
 
-Greybound currently treats the speaker IR as an optional post-amp convolution stage. The runtime implementation is optimized for live playing rather than offline production: a mono embedded cabinet IR, direct FIR for the first partition, and partitioned FFT convolution for the tail.
+Greybound currently treats the speaker IR as an optional post-amp convolution stage. The runtime implementation is optimized for live playing rather than offline production: a mono cabinet IR WAV, direct FIR for the first partition, and partitioned FFT convolution for the tail.
 
 This page tracks research that may guide future IR work. These papers are not implementation requirements yet; they are references for evaluating better interpolation, reconstruction, and spatial rendering approaches.
 
 ## Current Boundary
 
-- `core/src/ir.rs` owns the zero-latency hybrid convolver and embedded speaker IR loading.
+- `core/src/ir.rs` owns the zero-latency hybrid convolver and speaker IR WAV loading.
 - The first 256 IR taps run as direct FIR so the direct cabinet response starts at sample 0.
 - The remaining IR tail runs through partitioned FFT convolution, where the partition delay aligns naturally with the tail offset.
 - IR bypass returns the dry path immediately; it no longer adds a dry compensation delay.
@@ -23,7 +23,7 @@ Static cabinet IR:
 
 - Keep the current hybrid direct-head/FFT-tail convolver as the live baseline.
 - Add import and normalization tooling before adding more complex rendering.
-- Measure CPU, peak/RMS stability, and perceived tonal change against the current embedded IR.
+- Measure CPU, peak/RMS stability, and perceived tonal change against the current reference IR.
 
 Sparse measured IR interpolation:
 

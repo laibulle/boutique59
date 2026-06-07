@@ -62,14 +62,19 @@ impl RigConfig {
         !self.amp.bypassed
     }
 
-    pub fn cab_ir_enabled(&self) -> Result<bool> {
+    pub fn cab_ir_path(&self) -> Option<&str> {
         let Some(cab) = &self.cab else {
-            return Ok(false);
+            return None;
         };
-        if !matches!(cab.ir.as_str(), "tone3000-celestion" | "embedded-v30") {
-            bail!("unknown cab IR '{}'", cab.ir);
+        if cab.bypassed {
+            None
+        } else {
+            Some(&cab.ir)
         }
-        Ok(!cab.bypassed)
+    }
+
+    pub fn cab_ir_enabled(&self) -> bool {
+        self.cab_ir_path().is_some()
     }
 
     pub fn device_controls(&self) -> Result<Vec<DeviceSlotControls>> {
@@ -433,7 +438,7 @@ mod tests {
                 bypassed: false,
               },
               cab: {
-                ir: 'tone3000-celestion',
+                ir: 'lab/references/tone3000-irs/celestion.wav',
                 bypassed: false,
               },
             }
@@ -450,7 +455,7 @@ mod tests {
         );
         assert!(controls[0].bypassed);
         assert!(rig.amp_enabled());
-        assert!(rig.cab_ir_enabled().unwrap());
+        assert!(rig.cab_ir_enabled());
     }
 
     #[test]
@@ -469,7 +474,7 @@ mod tests {
         assert_eq!(controls.len(), 12);
         assert!(controls.iter().all(|slot| slot.bypassed));
         assert!(rig.amp_enabled());
-        assert!(rig.cab_ir_enabled().unwrap());
+        assert!(rig.cab_ir_enabled());
     }
 
     #[test]

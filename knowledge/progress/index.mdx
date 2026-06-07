@@ -9,7 +9,7 @@ This page tracks the project state at a practical engineering level. Update it w
 
 - Added monitor modes that do not require a real audio output.
 - Added WAV monitor output for later inspection.
-- Verified a short WAV monitor render with `target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir --monitor`.
+- Verified a short WAV monitor render with `target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor`.
 - Implemented the Muffin fuzz as a chainable pre-amp device.
 - Added plugin parameters for Muffin enable, sustain, tone, and level.
 - Implemented the Minotaur overdrive as a chainable pre-amp device.
@@ -22,7 +22,7 @@ This page tracks the project state at a practical engineering level. Update it w
 - Added an interactive terminal monitor for live amp knob changes without locking the audio callback.
 - Replaced rig-specific runtime examples with `target/release/greybound-cli --rig ...` commands.
 - Added JSON5 rig files that describe only rig topology and controls, including `rigs/nox30-clean.json5`, `rigs/nox30-edge.json5`, `rigs/nox30-driven.json5`, `rigs/muffin-nox30.json5`, `rigs/godess-one-nox30.json5`, `rigs/dartford-nox30.json5`, `rigs/minotaur-nox30.json5`, and `rigs/monarch-nox30.json5`.
-- Verified a short fuzz WAV render with `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir --monitor`.
+- Verified a short fuzz WAV render with `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor`.
 - Added Codex agent configuration for log analysis and focused implementation roles.
 - Started Fumadocs as the canonical place for architecture, progress, state, and contributor notes.
 

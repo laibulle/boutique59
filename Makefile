@@ -17,6 +17,7 @@ RIG ?=
 INPUT ?= live
 OUTPUT ?= device
 IR ?= 0
+IR_WAV ?= lab/references/tone3000-irs/celestion.wav
 MONITOR ?= 0
 TONE3000_INPUTS_DIR ?= lab/references/tone3000-inputs
 TONE3000_IRS_DIR ?= lab/references/tone3000-irs
@@ -50,7 +51,7 @@ OVERWRITE ?= 0
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
 
-IR_FLAG = $(if $(filter 1 true yes on,$(IR)),--ir,)
+IR_FLAG = $(if $(filter 0 false no off,$(IR)),,$(if $(filter 1 true yes on,$(IR)),--ir "$(IR_WAV)",--ir "$(IR)"))
 MONITOR_FLAG = $(if $(filter 1 true yes on,$(MONITOR)),--monitor,)
 OVERWRITE_FLAG = $(if $(filter 1 true yes on,$(OVERWRITE)),--overwrite,)
 RIG_FLAG = $(if $(strip $(RIG)),--rig "$(RIG)",)
@@ -68,13 +69,14 @@ standalone: build
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
 
+standalone-with-ir: IR=1
 standalone-with-ir: build
 	@$(REQUIRE_RIG)
 	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
 		$(RIG_FLAG) \
-		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB) --ir
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB) $(IR_FLAG)
 
 standalone-run: build
 	@$(REQUIRE_RIG)

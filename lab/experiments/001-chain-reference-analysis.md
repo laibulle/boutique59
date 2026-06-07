@@ -39,7 +39,7 @@ uv --project lab run greybound-lab render-rig \
   --sample-rate 48000 \
   --period-size 16 \
   --output-db -18 \
-  --ir
+  --ir lab/references/tone3000-irs/celestion.wav
 ```
 
 Compare it against a reference:

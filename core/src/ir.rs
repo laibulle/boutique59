@@ -16,7 +16,13 @@ pub struct SpeakerStage {
 
 impl SpeakerStage {
     pub fn from_embedded_ir(sample_rate: u32) -> Result<Self> {
-        Self::new(load_embedded_ir(sample_rate)?)
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../lab/references/tone3000-irs/celestion.wav");
+        Self::from_wav_path(path, sample_rate)
+    }
+
+    pub fn from_wav_path(path: impl AsRef<Path>, sample_rate: u32) -> Result<Self> {
+        Self::new(load_wav_ir(path.as_ref(), sample_rate)?)
     }
 
     pub fn new(ir: Vec<f32>) -> Result<Self> {
@@ -236,14 +242,8 @@ impl PartitionedConvolver {
     }
 }
 
-fn load_embedded_ir(sample_rate: u32) -> Result<Vec<f32>> {
-    if sample_rate != 48_000 {
-        bail!("no reference speaker IR for {sample_rate} Hz; supported rate: 48000");
-    }
-
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../lab/references/tone3000-irs/celestion.wav");
-    let bytes = std::fs::read(&path)
+fn load_wav_ir(path: &Path, sample_rate: u32) -> Result<Vec<f32>> {
+    let bytes = std::fs::read(path)
         .with_context(|| format!("could not read reference speaker IR at {}", path.display()))?;
     let mut reader =
         hound::WavReader::new(Cursor::new(bytes)).context("could not decode speaker IR WAV")?;
@@ -306,8 +306,10 @@ mod tests {
     }
 
     #[test]
-    fn embedded_ir_matches_supported_rate() {
-        assert!(!load_embedded_ir(48_000).unwrap().is_empty());
-        assert!(load_embedded_ir(32_000).is_err());
+    fn wav_ir_matches_supported_rate() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../lab/references/tone3000-irs/celestion.wav");
+        assert!(!load_wav_ir(&path, 48_000).unwrap().is_empty());
+        assert!(load_wav_ir(&path, 32_000).is_err());
     }
 }

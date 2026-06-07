@@ -2878,6 +2878,7 @@ struct Args {
     input_gain: f32,
     output_db: f32,
     ir: bool,
+    ir_path: Option<PathBuf>,
     monitor: bool,
     monitor_log: PathBuf,
     model: String,
@@ -3058,8 +3059,9 @@ fn main() -> Result<()> {
     let input_gain = args.input_gain;
     let mut chain = SignalChain::new(args.sample_rate as f32, args.chain_config.clone());
     let mut speaker = args
-        .ir
-        .then(|| SpeakerStage::from_embedded_ir(args.sample_rate))
+        .ir_path
+        .as_ref()
+        .map(|path| SpeakerStage::from_wav_path(path, args.sample_rate))
         .transpose()?;
     let ir_enabled = speaker.is_some();
     let monitoring_output = monitoring.clone();
@@ -3348,7 +3350,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut period_size = 256;
     let mut input_db = 0.0;
     let mut output_db = -9.0;
-    let mut ir = false;
+    let mut ir_path = None;
     let mut monitor = false;
     let mut monitor_log = PathBuf::from("greybound-monitor.log");
     let mut args = env::args().skip(1);
@@ -3379,7 +3381,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--period-size" => period_size = next_value(&mut args, "--period-size")?.parse()?,
             "--input-db" => input_db = next_value(&mut args, "--input-db")?.parse()?,
             "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse()?,
-            "--ir" => ir = true,
+            "--ir" => ir_path = Some(PathBuf::from(next_value(&mut args, "--ir")?)),
             "--monitor" => monitor = true,
             "--monitor-log" => monitor_log = PathBuf::from(next_value(&mut args, "--monitor-log")?),
             "--list-devices" => {
@@ -3441,7 +3443,11 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let amp_enabled = rig.amp_enabled();
     let chain_config = rig.signal_chain_config()?;
     let device_controls = rig.device_controls()?;
-    let ir = ir || rig.cab_ir_enabled()?;
+    let rig_ir_path = rig
+        .cab_ir_path()
+        .map(PathBuf::from);
+    let ir_path = ir_path.or(rig_ir_path);
+    let ir = ir_path.is_some();
     let rig_name = rig.name.or_else(|| {
         path.file_stem()
             .and_then(|stem| stem.to_str())
@@ -3468,11 +3474,13 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         input_gain: 10.0_f32.powf(input_db / 20.0),
         output_db,
         ir,
+        ir_path,
         monitor,
         monitor_log,
         model,
     })
 }
+
 
 fn next_value(args: &mut impl Iterator<Item = String>, option: &str) -> Result<String> {
     args.next()
@@ -3563,7 +3571,7 @@ fn print_help() {
          \x20 --output-db DB            Safety output trim [default: -9]\n\
          \x20 --monitor                 Show interactive VU meters and amp controls\n\
          \x20 --monitor-log PATH        Rotating monitor log [default: greybound-monitor.log]\n\
-         \x20 --ir                      Force-enable the embedded 200 ms speaker IR, even if the rig has no active cab\n\
+         \x20 --ir PATH                 Force-enable a speaker IR WAV path, even if the rig has no active cab\n\
          \x20 --list-devices            List CoreAudio devices"
     );
 }

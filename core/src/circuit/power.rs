@@ -26,6 +26,7 @@ pub struct OutputTransformerParams {
     pub primary_inductance: f32,
     pub leakage_cutoff_hz: f32,
     pub core_saturation: f32,
+    pub secondary_saturation_voltage: f32,
     pub output_scale: f32,
 }
 
@@ -143,8 +144,11 @@ impl OutputTransformerStage {
         let saturation = 1.0 / (1.0 + (self.core_flux.abs() * self.params.core_saturation).powi(2));
         self.core_flux *= 0.9995;
 
-        self.leakage_lowpass
-            .process(primary_highpass * saturation * self.params.output_scale)
+        let secondary = self
+            .leakage_lowpass
+            .process(primary_highpass * saturation * self.params.output_scale);
+        let knee = self.params.secondary_saturation_voltage.max(1e-6);
+        (secondary / knee).tanh() * knee
     }
 }
 
@@ -528,6 +532,7 @@ mod tests {
             primary_inductance: 47.0,
             leakage_cutoff_hz: 13_000.0,
             core_saturation: 1_400.0,
+            secondary_saturation_voltage: 1.0,
             output_scale: 1.0,
         })
     }

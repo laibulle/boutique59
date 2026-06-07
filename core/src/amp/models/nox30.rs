@@ -199,7 +199,7 @@ impl Nox30 {
             (toned, 0.0, 0.0)
         };
 
-        let send_voltage = driven_tone * 4.0 * preamp_voltage * phase_inverter_voltage;
+        let send_voltage = driven_tone * 4.45 * preamp_voltage * phase_inverter_voltage;
         self.preamp_send_v = send_voltage;
 
         Nox30PreampOutput {
@@ -463,7 +463,8 @@ fn output_transformer_params(sample_rate: f32) -> OutputTransformerParams {
         primary_resistance: 100_000.0,
         primary_inductance: 47.0,
         leakage_cutoff_hz: 13_000.0,
-        core_saturation: 1_400.0,
+        core_saturation: 6_500.0,
+        secondary_saturation_voltage: 0.52,
         output_scale: 0.90,
     }
 }

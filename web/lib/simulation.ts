@@ -49,28 +49,18 @@ export function formatDbfs(level: number) {
   return Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(1)}` : "-inf";
 }
 
-export function commandPreview(rig: RigPreset, runtime: RuntimeConfig) {
-  const parts = ["target/release/greybound-cli", "--rig", rig.file];
-  if (runtime.inputWav) parts.push("--input-wav", quote(runtime.inputWav));
-  if (runtime.outputWav) parts.push("--output-wav", quote(runtime.outputWav), "--render-seconds", String(runtime.renderSeconds));
-  if (runtime.nullOutput) parts.push("--null-output");
-  if (!runtime.outputWav && !runtime.nullOutput) {
-    if (runtime.device) parts.push("--device", quote(runtime.device));
-    if (runtime.inputDevice) parts.push("--input-device", quote(runtime.inputDevice));
-    if (runtime.outputDevice) parts.push("--output-device", quote(runtime.outputDevice));
-  }
-  parts.push("--input-channel", String(runtime.inputChannel));
-  parts.push("--output-channels", runtime.outputChannels);
-  parts.push("--sample-rate", String(runtime.sampleRate));
-  parts.push("--period-size", String(runtime.periodSize));
-  parts.push("--input-db", String(runtime.inputDb));
-  parts.push("--output-db", String(runtime.outputDb));
-  if (runtime.speakerIr) parts.push("--ir", "cab/v30.wav");
-  if (runtime.monitor) parts.push("--monitor", "--monitor-log", runtime.monitorLog);
-  if (runtime.neuralCell) {
-    parts.push("--neural-cell", quote(runtime.neuralCell), "--neural-cell-mode", runtime.neuralCellMode);
-  }
-  return parts.join(" ");
+export function runtimePreview(rig: RigPreset, runtime: RuntimeConfig) {
+  return [
+    `engine: greybound-wasm / ${rig.model}`,
+    `rig: ${rig.file}`,
+    `device: ${runtime.device}`,
+    `input: ${runtime.inputSourceUrl}`,
+    `ir: ${runtime.speakerIr ? runtime.irSourceUrl : "bypassed"}`,
+    `sample-rate: ${runtime.sampleRate}`,
+    `period-size: ${runtime.periodSize}`,
+    `input-db: ${runtime.inputDb}`,
+    `output-db: ${runtime.outputDb}`,
+  ].join("\n");
 }
 
 export function simulateMonitor(rig: RigPreset, runtime: RuntimeConfig, tick: number): MonitorStats {
@@ -126,10 +116,6 @@ export function simulateMonitor(rig: RigPreset, runtime: RuntimeConfig, tick: nu
       return { label, avg: base, max: base * (2.2 + wave) };
     }),
   };
-}
-
-function quote(value: string) {
-  return value.includes(" ") ? `'${value}'` : value;
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -1,29 +1,73 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { ampControls, defaultRuntimeConfig, rigPresets, type AmpControlId, type Pedal, type RuntimeConfig } from "../lib/rigs";
-import { commandPreview, formatDbfs, simulateMonitor, type MonitorStats } from "../lib/simulation";
+import { formatDbfs, runtimePreview, simulateMonitor, type MonitorStats } from "../lib/simulation";
+import { defaultTone3000Input, defaultTone3000Ir, tone3000Inputs, tone3000Irs } from "../lib/tone3000";
+import { createWasmRenderState, renderWasmMonitorBlock, type WasmRenderState } from "../lib/wasmMonitor";
 
 export function GreyboundConsole() {
   const [rigId, setRigId] = useState("nox30-driven");
-  const [runtime, setRuntime] = useState<RuntimeConfig>(defaultRuntimeConfig);
+  const [runtime, setRuntime] = useState<RuntimeConfig>({
+    ...defaultRuntimeConfig,
+    inputSourceUrl: defaultTone3000Input.url,
+    irSourceUrl: defaultTone3000Ir.url,
+  });
   const [tick, setTick] = useState(0);
+  const [stats, setStats] = useState<MonitorStats | null>(null);
+  const [engineStatus, setEngineStatus] = useState("loading wasm");
+  const renderStateRef = useRef<WasmRenderState | null>(null);
   const rig = useMemo(() => rigPresets.find((preset) => preset.id === rigId) ?? rigPresets[0], [rigId]);
   const [ampValues, setAmpValues] = useState(rig.amp);
   const liveRig = useMemo(() => ({ ...rig, amp: ampValues }), [rig, ampValues]);
-  const stats = useMemo(() => simulateMonitor(liveRig, runtime, tick), [liveRig, runtime, tick]);
+  const fallbackStats = useMemo(() => simulateMonitor(liveRig, runtime, tick), [liveRig, runtime, tick]);
+  const monitorStats = stats ?? fallbackStats;
 
   useEffect(() => {
     setAmpValues(rig.amp);
   }, [rig]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setTick((value) => value + 1), 250);
-    return () => window.clearInterval(interval);
-  }, []);
+    let cancelled = false;
+    renderStateRef.current = null;
+    setStats(null);
+    setEngineStatus("loading sources");
+    createWasmRenderState({
+      sampleRate: runtime.sampleRate,
+      inputUrl: runtime.inputSourceUrl,
+      irUrl: runtime.speakerIr ? runtime.irSourceUrl : null,
+    })
+      .then((state) => {
+        if (cancelled) {
+          state.engine.free();
+          return;
+        }
+        renderStateRef.current = state;
+        setEngineStatus("wasm live");
+      })
+      .catch((error: unknown) => {
+        renderStateRef.current = null;
+        setEngineStatus(error instanceof Error ? `wasm fallback: ${error.message}` : "wasm fallback");
+      });
+    return () => {
+      cancelled = true;
+      renderStateRef.current?.engine.free();
+      renderStateRef.current = null;
+    };
+  }, [runtime.sampleRate, runtime.inputSourceUrl, runtime.irSourceUrl, runtime.speakerIr]);
 
-  const command = commandPreview(liveRig, runtime);
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTick((value) => value + 1);
+      const state = renderStateRef.current;
+      if (!state) return;
+      setStats(renderWasmMonitorBlock(state, liveRig, ampValues, runtime));
+    }, 250);
+    return () => window.clearInterval(interval);
+  }, [ampValues, liveRig, runtime]);
+
+  const runtimeDetails = runtimePreview(liveRig, runtime);
 
   return (
     <main className="shell">
@@ -34,7 +78,7 @@ export function GreyboundConsole() {
         </div>
         <div className="engineState">
           <span className="stateDot" />
-          <span>WASM pending</span>
+          <span>{engineStatus}</span>
         </div>
       </header>
 
@@ -50,8 +94,6 @@ export function GreyboundConsole() {
           <div className="runtimeGrid">
             <NumberField label="Sample rate" value={runtime.sampleRate} min={1} step={1000} onChange={(sampleRate) => setRuntime({ ...runtime, sampleRate })} />
             <NumberField label="Period" value={runtime.periodSize} min={1} step={16} onChange={(periodSize) => setRuntime({ ...runtime, periodSize })} />
-            <NumberField label="Input ch" value={runtime.inputChannel} min={1} step={1} onChange={(inputChannel) => setRuntime({ ...runtime, inputChannel })} />
-            <TextField label="Outputs" value={runtime.outputChannels} onChange={(outputChannels) => setRuntime({ ...runtime, outputChannels })} />
             <NumberField label="Input dB" value={runtime.inputDb} min={-60} max={24} step={1} onChange={(inputDb) => setRuntime({ ...runtime, inputDb })} />
             <NumberField label="Output dB" value={runtime.outputDb} min={-60} max={6} step={1} onChange={(outputDb) => setRuntime({ ...runtime, outputDb })} />
           </div>
@@ -59,22 +101,31 @@ export function GreyboundConsole() {
           <div className="switches">
             <Switch label="Monitor" checked={runtime.monitor} onChange={(monitor) => setRuntime({ ...runtime, monitor })} />
             <Switch label="Speaker IR" checked={runtime.speakerIr} onChange={(speakerIr) => setRuntime({ ...runtime, speakerIr })} />
-            <Switch label="Null output" checked={runtime.nullOutput} onChange={(nullOutput) => setRuntime({ ...runtime, nullOutput })} />
           </div>
 
-          <TextField label="Device" value={runtime.device} onChange={(device) => setRuntime({ ...runtime, device })} />
-          <TextField label="Input WAV" value={runtime.inputWav} onChange={(inputWav) => setRuntime({ ...runtime, inputWav })} />
-          <TextField label="Output WAV" value={runtime.outputWav} onChange={(outputWav) => setRuntime({ ...runtime, outputWav })} />
+          <AssetSelect
+            label="TONE3000 input"
+            value={runtime.inputSourceUrl}
+            options={tone3000Inputs}
+            onChange={(inputSourceUrl) => setRuntime({ ...runtime, inputSourceUrl })}
+          />
+          <AssetSelect
+            label="TONE3000 IR"
+            value={runtime.irSourceUrl}
+            options={tone3000Irs}
+            onChange={(irSourceUrl) => setRuntime({ ...runtime, irSourceUrl })}
+          />
+          <ReadOnlyField label="Device" value={runtime.device} />
         </aside>
 
         <section className="mainPanel">
           <MonitorHeader rigName={liveRig.name} file={liveRig.file} log={runtime.monitorLog} />
           <Pedalboard pedals={liveRig.pedals} ampBypassed={liveRig.ampBypassed} cabEnabled={runtime.speakerIr || liveRig.cabEnabled} />
-          <Meters stats={stats} />
-          <ComponentTelemetry stats={stats} />
+          <Meters stats={monitorStats} />
+          <ComponentTelemetry stats={monitorStats} />
           <div className="lowerGrid">
             <AmpControls values={ampValues} onChange={(id, value) => setAmpValues({ ...ampValues, [id]: value })} />
-            <CommandPreview command={command} />
+            <RuntimePreview details={runtimeDetails} />
           </div>
         </section>
       </section>
@@ -233,14 +284,14 @@ function AmpControls({ values, onChange }: { values: Record<AmpControlId, number
   );
 }
 
-function CommandPreview({ command }: { command: string }) {
+function RuntimePreview({ details }: { details: string }) {
   return (
     <section className="commandPanel">
       <div className="panelTitle">
-        <h3>CLI preview</h3>
-        <span>mock runtime</span>
+        <h3>Web runtime</h3>
+        <span>wasm sources</span>
       </div>
-      <code>{command}</code>
+      <code>{details}</code>
     </section>
   );
 }
@@ -254,11 +305,24 @@ function NumberField({ label, value, min, max, step, onChange }: { label: string
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <div className="readonlyField">{value}</div>
+    </div>
+  );
+}
+
+function AssetSelect({ label, value, options, onChange }: { label: string; value: string; options: { label: string; url: string }[]; onChange: (value: string) => void }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="text" value={value} onChange={(event) => onChange(event.target.value)} />
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.url} value={option.url}>{option.label}</option>
+        ))}
+      </select>
     </label>
   );
 }

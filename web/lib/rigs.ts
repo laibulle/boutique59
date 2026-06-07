@@ -175,18 +175,20 @@ export type RuntimeConfig = {
   inputDb: number;
   outputDb: number;
   inputWav: string;
+  inputSourceUrl: string;
   outputWav: string;
   renderSeconds: number;
   monitor: boolean;
   nullOutput: boolean;
   speakerIr: boolean;
+  irSourceUrl: string;
   monitorLog: string;
   neuralCell: string;
   neuralCellMode: "shadow" | "replace";
 };
 
 export const defaultRuntimeConfig: RuntimeConfig = {
-  device: "Scarlett 18i8 USB",
+  device: "macOS default",
   inputDevice: "",
   outputDevice: "",
   inputChannel: 1,
@@ -196,11 +198,13 @@ export const defaultRuntimeConfig: RuntimeConfig = {
   inputDb: 0,
   outputDb: -9,
   inputWav: "",
+  inputSourceUrl: "https://raw.githubusercontent.com/tone-3000/neural-amp-modeler-wasm/main/ui/public/inputs/Brit%20-%20Guitar.wav",
   outputWav: "",
   renderSeconds: 20,
   monitor: true,
   nullOutput: false,
-  speakerIr: false,
+  speakerIr: true,
+  irSourceUrl: "https://raw.githubusercontent.com/tone-3000/neural-amp-modeler-wasm/main/ui/public/irs/celestion.wav",
   monitorLog: "greybound-monitor.log",
   neuralCell: "",
   neuralCellMode: "shadow",

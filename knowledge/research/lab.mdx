@@ -46,7 +46,8 @@ The first implemented loop is complete-chain WAV analysis.
 2. Compare that WAV against a reference WAV.
 3. Optionally provide segment markers for local diagnostics.
 4. Generate synthetic stimuli when the metric needs controlled input.
-5. Read the generated Markdown report to decide what to investigate next.
+5. Run SPICE fixtures for bounded circuit-cell references.
+6. Read the generated Markdown report to decide what to investigate next.
 
 This is deliberately before NAM integration or neural training. Without a
 stable comparison loop, training would produce numbers without engineering
@@ -116,6 +117,28 @@ The generated set currently includes:
 - `pluck-attacks.wav`: synthetic plucks for attack timing and overshoot.
 
 Generated stimuli are ignored by git. The generator code is the source of truth.
+
+## Run SPICE Fixtures
+
+Use `spice-run` to execute supported ngspice fixtures and import their output
+into the lab:
+
+```sh
+uv --project lab run greybound-lab spice-run \
+  --fixture common-cathode-12ax7 \
+  --output-dir lab/references/spice
+```
+
+The first supported fixture is `common-cathode-12ax7`. It produces:
+
+- copied SPICE `wrdata` output,
+- a Markdown report with DC operating point,
+- settled 1 kHz transient gain metrics.
+
+This is the bridge from full-rig observations to cell-level validation. The
+first report gives the common-cathode stage a reproducible electrical anchor:
+plate around `250.544 V`, cathode around `0.402 V`, B+ around `277.322 V`, and
+small-signal plate gain around `14.88x`.
 
 ## Compare WAV Files
 
@@ -257,7 +280,8 @@ the bundled dry guitar sample, not a canonical transcription of the performance.
 `lab/experiments/`
 
 : Committed experiment plans. The first one is
-  `001-chain-reference-analysis.md`.
+  `001-chain-reference-analysis.md`; the first completed controlled-stimulus
+  pass is `002-nox30-stimulus-batch.md`.
 
 `lab/schemas/`
 
@@ -304,6 +328,8 @@ Implemented:
 - intermodulation diagnostics for two-tone segments,
 - generated stimuli for harmonic, high-band/aliasing, sag, attack, and future
   intermodulation protocols,
+- first controlled-stimulus Nox30 clean/driven batch,
+- first common-cathode SPICE import/report,
 - tests for metric alignment and metadata generation,
 - first experiment plan for chain reference analysis.
 
@@ -311,7 +337,7 @@ Not implemented yet:
 
 - plots in reports,
 - NAM profile rendering/import workflow,
-- SPICE automation,
+- broader SPICE fixture automation beyond the first common-cathode import,
 - dataset manifests for training,
 - fitted micro-model training,
 - Rust artifact export.
@@ -324,7 +350,7 @@ The next useful improvements are:
 - define a real reference WAV protocol,
 - add a stronger aliasing score that separates harmonics from folded non-harmonic
   residuals,
+- extend the common-cathode SPICE fixture to level sweeps and two-tone IMD,
 - standardize one Nox30-style NAM comparison,
-- add SPICE export analysis for one small circuit cell,
 - decide the first fitted cell only after the reports show where the largest
   error is.

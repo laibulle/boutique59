@@ -187,6 +187,8 @@ Phase 1: lab skeleton
 - add CLI commands or scripts for offline renders,
 - implement alignment and spectral metric reports,
 - document how to compare Greybound WAV output against a reference WAV.
+- run the first controlled-stimulus clean/driven batch to identify the first
+  subsystem to investigate.
 
 Phase 2: NAM reference comparisons
 
@@ -202,6 +204,11 @@ Phase 3: SPICE cell generation
 - generate reproducible SPICE sweeps,
 - compare the current Greybound approximation against SPICE,
 - decide whether the answer should be analytic, tabulated, or neural.
+
+Current first cell: `common-cathode-12ax7`, imported with `greybound-lab
+spice-run`. The first pass covers DC operating point and a settled 1 kHz
+small-signal transient. The next SPICE step is to add level sweeps and two-tone
+IMD for large-signal behavior.
 
 Phase 4: first fitted micro-model
 

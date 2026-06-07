@@ -8,6 +8,7 @@ from greybound_lab.metrics import compare_signals
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import render_rig
 from greybound_lab.segments import load_segments
+from greybound_lab.spice import run_spice_fixture
 from greybound_lab.stimuli import generate_stimuli
 
 
@@ -40,6 +41,10 @@ def main() -> None:
     stimuli.add_argument("--output-dir", type=Path, default=Path("lab/stimuli"))
     stimuli.add_argument("--sample-rate", type=int, default=44_100)
 
+    spice = subparsers.add_parser("spice-run", help="Run a supported SPICE fixture and write a lab report.")
+    spice.add_argument("--fixture", required=True, choices=["common-cathode-12ax7"])
+    spice.add_argument("--output-dir", type=Path, default=Path("lab/references/spice"))
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -47,6 +52,8 @@ def main() -> None:
         run_render_rig(args)
     elif args.command == "generate-stimuli":
         run_generate_stimuli(args)
+    elif args.command == "spice-run":
+        run_spice(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -99,6 +106,12 @@ def run_generate_stimuli(args: argparse.Namespace) -> None:
     for item in generated:
         print(f"wrote {item.wav_path}")
         print(f"wrote {item.markers_path}")
+
+
+def run_spice(args: argparse.Namespace) -> None:
+    data_path, report_path = run_spice_fixture(args.fixture, args.output_dir, repo_root=Path.cwd())
+    print(f"wrote {data_path}")
+    print(f"wrote {report_path}")
 
 
 if __name__ == "__main__":

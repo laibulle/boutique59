@@ -51,6 +51,14 @@ uv --project lab run greybound-lab generate-stimuli \
   --sample-rate 44100
 ```
 
+Run the first SPICE cell reference:
+
+```sh
+uv --project lab run greybound-lab spice-run \
+  --fixture common-cathode-12ax7 \
+  --output-dir lab/references/spice
+```
+
 ## Start Here
 
 The first R&D target is not training. It is measurement.
@@ -66,9 +74,12 @@ way to compare:
 The first experiment is:
 
 - [001 Chain Reference Analysis](experiments/001-chain-reference-analysis.md)
+- [002 Nox30 Stimulus Batch](experiments/002-nox30-stimulus-batch.md)
+- [003 Common-Cathode SPICE Reference](experiments/003-common-cathode-spice-reference.md)
 
-It defines the minimum useful analysis loop: render, align, normalize, measure,
-and report.
+These define the minimum useful analysis loop and the first controlled-stimulus
+comparison between Greybound rigs, then bridge into the first cell-level SPICE
+reference.
 
 ## Directory Layout
 

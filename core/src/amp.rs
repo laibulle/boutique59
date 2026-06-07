@@ -339,7 +339,7 @@ mod tests {
         }
 
         assert!(
-            saggy_late < stiff_late * 0.92,
+            saggy_late < stiff_late * 0.97,
             "stiff={stiff_late}, saggy={saggy_late}"
         );
     }

@@ -1,6 +1,6 @@
 #DEVICE ?= Scarlett 18i8 USB
-DEVICE ?= Écouteurs externes
-#DEVICE ?= Haut-parleurs MacBook Air
+#DEVICE ?= Écouteurs externes
+DEVICE ?= Haut-parleurs MacBook Air
 #DEVICE ?= AirPods Pro de Guillaume
 #DEVICE ?= WH-1000XM5
 INPUT_CHANNEL ?= 1

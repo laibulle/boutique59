@@ -7,6 +7,7 @@ import numpy as np
 
 from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export_neural_cell_vectors
 from greybound_lab.neural_cell import infer_artifact_numpy, infer_mlp_numpy
+from greybound_lab.neural_cell import build_mlp_descriptor, PreparedDataset, PreparedSplit
 from greybound_lab.neural_cell import read_mlp_weights, write_mlp_weights
 
 
@@ -110,6 +111,44 @@ def test_export_neural_cell_vectors(tmp_path: Path) -> None:
     assert payload["artifact_id"] == "test-cell"
     assert len(payload["cases"]) == 3
     assert payload["cases"][1]["expected_output_v"] == 0.0
+
+
+def test_build_mlp_descriptor_uses_output_directory_as_artifact_id(tmp_path: Path) -> None:
+    output_dir = tmp_path / "common-cathode-12ax7-mlp-v99"
+    output_dir.mkdir()
+    weights_path = output_dir / "weights.greybound.bin"
+    weights_path.write_bytes(b"weights")
+    manifest_path = tmp_path / "dataset.json"
+    manifest = {"stimuli": []}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    empty = PreparedSplit(x=np.zeros((0, 1), dtype=np.float32), y=np.zeros((0, 1), dtype=np.float32))
+    prepared = PreparedDataset(
+        train=empty,
+        validation=empty,
+        test=empty,
+        input_mean=0.0,
+        input_std=1.0,
+        output_mean=0.0,
+        output_std=1.0,
+        sample_rate_hz=48000,
+        train_ids=[],
+        validation_ids=[],
+        test_ids=[],
+    )
+
+    descriptor = build_mlp_descriptor(
+        manifest=manifest,
+        manifest_path=manifest_path,
+        output_dir=output_dir,
+        repo_root=tmp_path,
+        weights_path=weights_path,
+        hidden_size=8,
+        prepared=prepared,
+        metrics={},
+    )
+
+    assert descriptor["artifact_id"] == "common-cathode-12ax7-mlp-v99"
+    assert "experimental Nox30 integration" in descriptor["runtime"]["cpu_notes"]
 
 
 def test_evaluate_neural_cell_against_spice_writes_report(tmp_path: Path) -> None:

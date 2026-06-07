@@ -239,20 +239,24 @@ The command writes:
 - `common-cathode-12ax7.dataset.json`.
 
 This is the first small multi-stimulus corpus. It runs generated SPICE netlists
-for several 1 kHz sine levels plus two-tone IMD cases, writes raw traces, packs
-a `.npz`, and records hashes, node roles, train/validation/test splits,
-component values, generated netlists, and operating point. Its purpose is to
-make the SPICE-to-training contract executable before we expand to source/load
-impedance sweeps, B+ perturbation, component tolerance sweeps, transient plucks,
-and real DI windows.
+for several 1 kHz sine levels, two-tone IMD cases, and first burst/decay
+dynamic probes. It writes raw traces, packs a `.npz`, and records hashes, node
+roles, train/validation/test splits, component values, generated netlists, and
+operating point. Its purpose is to make the SPICE-to-training contract
+executable before we expand to source/load impedance sweeps, B+ perturbation,
+component tolerance sweeps, stronger transient probes, and real DI windows.
 
-Train the first experimental MLP artifact with:
+Train the current experimental MLP artifact with:
 
 ```sh
 uv --project lab run --with torch greybound-lab train-neural-cell \
   --cell common-cathode-12ax7-mlp \
   --dataset-manifest lab/datasets/spice/common-cathode-12ax7.dataset.json \
-  --output-dir lab/models/common-cathode-12ax7-mlp-v1
+  --output-dir lab/models/common-cathode-12ax7-mlp-current \
+  --epochs 1200 \
+  --hidden-size 32 \
+  --learning-rate 0.0005 \
+  --stride 8
 ```
 
 The command writes:
@@ -261,23 +265,25 @@ The command writes:
 - `weights.greybound.bin`,
 - `training-report.md`.
 
-This model is an export smoke test. It maps normalized `input_v` to normalized
-`plate_ac_v` through a small static MLP and proves the PyTorch-to-Greybound
-artifact path. It does not model tube memory, capacitance, source/load
-interaction, B+ perturbation, or runtime Rust inference yet.
+This model is still a static cell, but the current working artifact is no
+longer only an export smoke test. It maps normalized `input_v` to normalized
+`plate_ac_v` through a small MLP and proves the PyTorch-to-Greybound artifact
+path, Rust inference path, and explicit Nox30 first-stage insertion path. It
+still does not model tube memory, capacitance, source/load interaction, or B+
+perturbation.
 
 The Rust core now has an experimental `neural_cell` loader for this artifact
 shape. It can parse `model.greybound.json`, read `weights.greybound.bin`, and run
-deterministic scalar MLP inference with `tanh` activations. This is still outside
-the live audio path: no amp model uses it yet, and it has not been accepted as a
-real-time tube-cell replacement.
+deterministic scalar MLP inference with `tanh` activations. Nox30 can use it
+explicitly in `shadow` or `replace` mode for R&D. It has not been accepted as a
+default real-time tube-cell replacement.
 
 Export Python reference vectors and verify the local artifact through Rust with:
 
 ```sh
 uv --project lab run greybound-lab export-neural-cell-vectors \
-  --descriptor lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
-  --output lab/models/common-cathode-12ax7-mlp-v1/equivalence-vectors.json
+  --descriptor lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
+  --output lab/models/common-cathode-12ax7-mlp-current/equivalence-vectors.json
 
 make lab-check-neural-cell-rust
 ```
@@ -300,15 +306,14 @@ Nox30 has an explicit first-stage neural path. The CLI form is:
 
 ```sh
 target/release/greybound-cli \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/nox30-nam-anchor.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-nox30-monitor.wav \
   --render-seconds 20 \
   --sample-rate 48000 \
   --period-size 16 \
-  --ir lab/references/tone3000-irs/celestion.wav \
   --monitor \
-  --neural-cell nox30.first_stage=lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
+  --neural-cell nox30.first_stage=lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
   --neural-cell-mode shadow
 ```
 
@@ -341,27 +346,43 @@ It renders three versions of the same offline rig:
 - `replace.wav`: neural `nox30.first_stage` feeds the rest of the amp.
 
 The command writes its report to
-`lab/reports/integrated-neural-first-stage.md`. This is the first full-chain gate
-for a neural component: shadow telemetry gives local component error in volts,
-and replace-vs-analytic audio metrics show the complete audible/runtime impact.
-The current purpose is evidence collection, not promotion.
+`lab/reports/integrated-neural-first-stage-anchor-current.md`. It uses
+`rigs/nox30-nam-anchor.json5`, no IR, `lab/segments/guitar-chords.markers.json`,
+and the NAM TopBoost-Gain5 render as external reference. This is the first
+full-chain gate for a neural component: shadow telemetry gives local component
+error in volts, replace-vs-analytic audio metrics show the complete
+audible/runtime impact, and NAM comparison shows whether replacement moves the
+full chain toward or away from the external oracle.
+
+Current integrated result:
+
+- shadow first-stage average error: about `0.143 V`,
+- replace-vs-analytic null residual: about `-13.2 dB`,
+- replace-vs-analytic log-spectral distance: about `5.39 dB`,
+- analytic-vs-NAM log-spectral distance: about `12.43 dB`,
+- replace-vs-NAM log-spectral distance: about `12.32 dB`.
+
+The neural path is therefore integrated and measurable, but not promoted. The
+The working artifact moves the NAM metrics only slightly while still changing
+the analytic chain materially and keeping a high local shadow error.
 
 Evaluate the artifact against the SPICE dataset in physical units:
 
 ```sh
 uv --project lab run greybound-lab evaluate-neural-cell \
-  --descriptor lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
+  --descriptor lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
   --dataset-manifest lab/datasets/spice/common-cathode-12ax7.dataset.json \
-  --report lab/models/common-cathode-12ax7-mlp-v1/spice-evaluation.md \
-  --stride 32
+  --report lab/models/common-cathode-12ax7-mlp-current/spice-evaluation.md \
+  --stride 16
 ```
 
-The first local report evaluates 7 stimuli and 6,566 decimated samples. The
-aggregate RMSE is about `245 mV` against a zero-baseline RMSE around `644 mV`,
-so the artifact learns useful shape. The hot held-out sine remains poor:
-`sine_1khz_120mv` is about `583 mV` RMSE, or roughly `46%` relative RMSE. This
-confirms the pipeline is working, but the current static MLP is not a sufficient
-tube-cell replacement.
+The current report evaluates 10 stimuli and 23,760 decimated samples. The
+aggregate RMSE is about `55 mV` against a zero-baseline RMSE around `544 mV`,
+so the artifact learns useful shape and is comparable to the current analytic
+common-cathode baseline. The hot held-out sine remains the weak point:
+`sine_1khz_120mv` is about `193 mV` RMSE, or roughly `15%` relative RMSE. The
+new burst/decay cases are useful as a dataset contract, but they are not hard
+enough yet to prove a stateful neural model.
 
 Compare the existing Rust analytic common-cathode stage against the same SPICE
 dataset with:
@@ -370,11 +391,13 @@ dataset with:
 make lab-evaluate-analytic-common-cathode NEURAL_STRIDE=32
 ```
 
-The current analytic baseline is substantially stronger than the first MLP:
-about `80 mV` weighted RMSE versus about `245 mV` for the neural artifact. This
-means the immediate research target is not runtime integration. The next useful
-work is to understand why the analytic stage still has residual error and only
-then decide whether a neural or fitted component improves the held-out cases.
+The current analytic baseline is about `80 mV` weighted RMSE before diagnostic
+alignment and about `70 mV` after a small gain/latency correction. The current
+static MLP is now in the same range at about `55 mV` on the broader dataset, but
+the integrated Nox30 result still does not justify promotion. The immediate
+research target is now dynamic-state evidence: decide whether neural or fitted
+components can reduce held-out SPICE error and full-chain NAM distance without
+creating a large replace-vs-analytic residual.
 
 The analytic evaluator also reports a diagnostic residual after a small
 integer-latency search and optimal linear gain. The current weighted residual

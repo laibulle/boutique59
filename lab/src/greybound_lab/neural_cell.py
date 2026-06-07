@@ -313,7 +313,7 @@ def build_mlp_descriptor(
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "artifact_id": "common-cathode-12ax7-mlp-v1",
+        "artifact_id": output_dir.name,
         "cell_kind": "triode_gain_stage",
         "architecture": {
             "family": "mlp",
@@ -381,7 +381,7 @@ def build_mlp_descriptor(
             "max_block_size": 1,
             "allocates_on_audio_thread": False,
             "denormal_safe": False,
-            "cpu_notes": "Three dense layers. Experimental Python and Rust readers exist; live audio integration is not implemented yet.",
+            "cpu_notes": "Three dense layers. Python/Rust readers and experimental Nox30 integration exist; not approved for default live use.",
             "safety_clamps": {
                 "input_v_min": _stimulus_min(manifest, "amplitude_v", default=-0.12),
                 "input_v_max": _stimulus_max(manifest, "amplitude_v", default=0.12),
@@ -439,7 +439,7 @@ training/export/equivalence path.
 - Static MLP only: no state, no capacitance memory, no bias history.
 - Trained on decimated samples.
 - The dataset is still a small SPICE corpus.
-- Rust inference loader exists for equivalence checks; live audio integration is not implemented yet.
+- Rust inference and experimental Nox30 integration exist; not approved for default live use.
 """,
         encoding="utf-8",
     )

@@ -38,18 +38,22 @@ SPICE_FIXTURE ?= common-cathode-12ax7
 SPICE_DATASET_DIR ?= lab/datasets/spice
 NEURAL_CELL ?= common-cathode-12ax7-mlp
 NEURAL_DATASET_MANIFEST ?= lab/datasets/spice/common-cathode-12ax7.dataset.json
-NEURAL_OUTPUT_DIR ?= lab/models/common-cathode-12ax7-mlp-v1
-NEURAL_EPOCHS ?= 300
-NEURAL_HIDDEN_SIZE ?= 16
-NEURAL_LEARNING_RATE ?= 0.001
-NEURAL_STRIDE ?= 16
+NEURAL_OUTPUT_DIR ?= lab/models/common-cathode-12ax7-mlp-current
+NEURAL_EPOCHS ?= 1200
+NEURAL_HIDDEN_SIZE ?= 32
+NEURAL_LEARNING_RATE ?= 0.0005
+NEURAL_STRIDE ?= 8
 NEURAL_DESCRIPTOR ?= $(NEURAL_OUTPUT_DIR)/model.greybound.json
 NEURAL_VECTORS ?= $(NEURAL_OUTPUT_DIR)/equivalence-vectors.json
 NEURAL_EVAL_REPORT ?= $(NEURAL_OUTPUT_DIR)/spice-evaluation.md
 NEURAL_EVAL_SPLIT ?= all
 ANALYTIC_EVAL_REPORT ?= lab/reports/common-cathode-analytic-spice-evaluation.md
-INTEGRATED_NEURAL_DIR ?= lab/reports/integrated-neural-first-stage
-INTEGRATED_NEURAL_REPORT ?= lab/reports/integrated-neural-first-stage.md
+INTEGRATED_NEURAL_DIR ?= lab/reports/integrated-neural-first-stage-anchor-current
+INTEGRATED_NEURAL_REPORT ?= lab/reports/integrated-neural-first-stage-anchor-current.md
+INTEGRATED_NEURAL_RIG ?= rigs/nox30-nam-anchor.json5
+INTEGRATED_NEURAL_IR ?= 0
+INTEGRATED_NEURAL_REFERENCE_WAV ?= lab/reports/nam-diagnostics-ac30hwh-topboost-gain5-brit-noir.wav
+INTEGRATED_NEURAL_SEGMENTS ?= lab/segments/guitar-chords.markers.json
 OVERWRITE ?= 0
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
@@ -191,7 +195,7 @@ lab-evaluate-integrated-neural-cell: build
 	uv --project lab run greybound-lab evaluate-integrated-neural-cell \
 		--descriptor "$(NEURAL_DESCRIPTOR)" \
 		--component "nox30.first_stage" \
-		--rig "rigs/nox30-driven.json5" \
+		--rig "$(INTEGRATED_NEURAL_RIG)" \
 		--input-wav "$(TEST_INPUT_WAV)" \
 		--binary "$(CLI)" \
 		--output-dir "$(INTEGRATED_NEURAL_DIR)" \
@@ -201,8 +205,9 @@ lab-evaluate-integrated-neural-cell: build
 		--period-size "$(PERIOD_SIZE)" \
 		--input-db "$(INPUT_DB)" \
 		--output-db "$(OUTPUT_DB)" \
-		--ir \
-		--ir-wav "$(IR_WAV)"
+		$(if $(filter 1 true yes on,$(INTEGRATED_NEURAL_IR)),--ir --ir-wav "$(IR_WAV)",) \
+		$(if $(strip $(INTEGRATED_NEURAL_REFERENCE_WAV)),--reference-wav "$(INTEGRATED_NEURAL_REFERENCE_WAV)",) \
+		$(if $(strip $(INTEGRATED_NEURAL_SEGMENTS)),--segments "$(INTEGRATED_NEURAL_SEGMENTS)",)
 
 lab-evaluate-analytic-common-cathode:
 	cargo run -p greybound --example common_cathode_dataset_eval -- \

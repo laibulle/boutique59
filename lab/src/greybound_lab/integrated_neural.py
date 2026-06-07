@@ -22,6 +22,8 @@ class IntegratedNeuralReport:
     replace_wav: Path
     shadow_monitor_log: Path
     replace_vs_analytic: ComparisonMetrics
+    analytic_vs_reference: ComparisonMetrics | None
+    replace_vs_reference: ComparisonMetrics | None
     shadow_error_avg_v: float | None
     shadow_error_max_v: float | None
     shadow_error_count: int
@@ -45,6 +47,7 @@ def evaluate_integrated_neural_cell(
     ir_enabled: bool = True,
     ir_wav: Path | None = None,
     segments: Path | None = None,
+    reference_wav: Path | None = None,
 ) -> IntegratedNeuralReport:
     output_dir.mkdir(parents=True, exist_ok=True)
     analytic_wav = output_dir / "analytic.wav"
@@ -111,13 +114,34 @@ def evaluate_integrated_neural_cell(
     replace = read_wav_mono(replace_wav)
     if analytic.sample_rate != replace.sample_rate:
         raise ValueError("integrated neural render sample-rate mismatch")
+    segment_specs = load_segments(segments) if segments else None
     metrics = compare_signals(
         replace.samples,
         analytic.samples,
         analytic.sample_rate,
         max_lag_ms=100.0,
-        segments=load_segments(segments) if segments else None,
+        segments=segment_specs,
     )
+    analytic_vs_reference = None
+    replace_vs_reference = None
+    if reference_wav is not None:
+        reference = read_wav_mono(reference_wav)
+        if analytic.sample_rate != reference.sample_rate or replace.sample_rate != reference.sample_rate:
+            raise ValueError("integrated neural reference sample-rate mismatch")
+        analytic_vs_reference = compare_signals(
+            analytic.samples,
+            reference.samples,
+            analytic.sample_rate,
+            max_lag_ms=100.0,
+            segments=segment_specs,
+        )
+        replace_vs_reference = compare_signals(
+            replace.samples,
+            reference.samples,
+            replace.sample_rate,
+            max_lag_ms=100.0,
+            segments=segment_specs,
+        )
     shadow_avg, shadow_max, shadow_count = parse_shadow_error(shadow_log)
     result = IntegratedNeuralReport(
         analytic_wav=analytic_wav,
@@ -125,11 +149,13 @@ def evaluate_integrated_neural_cell(
         replace_wav=replace_wav,
         shadow_monitor_log=shadow_log,
         replace_vs_analytic=metrics,
+        analytic_vs_reference=analytic_vs_reference,
+        replace_vs_reference=replace_vs_reference,
         shadow_error_avg_v=shadow_avg,
         shadow_error_max_v=shadow_max,
         shadow_error_count=shadow_count,
     )
-    write_integrated_neural_report(report, result, component, descriptor, rig, input_wav)
+    write_integrated_neural_report(report, result, component, descriptor, rig, input_wav, reference_wav)
     return result
 
 
@@ -155,6 +181,7 @@ def write_integrated_neural_report(
     descriptor: Path,
     rig: Path,
     input_wav: Path,
+    reference_wav: Path | None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     metrics = result.replace_vs_analytic
@@ -167,6 +194,7 @@ def write_integrated_neural_report(
 - Descriptor: `{descriptor}`
 - Rig: `{rig}`
 - Input WAV: `{input_wav}`
+- Reference WAV: `{reference_wav if reference_wav else "not provided"}`
 - Analytic render: `{result.analytic_wav}`
 - Shadow render: `{result.shadow_wav}`
 - Replace render: `{result.replace_wav}`
@@ -190,11 +218,11 @@ def write_integrated_neural_report(
 | Log-spectral distance | {metrics.log_spectral_distance_db:.2f} dB |
 | Envelope error | {metrics.envelope_error_db:.2f} dB |
 
+{_render_reference_comparisons(result.analytic_vs_reference, result.replace_vs_reference)}
+
 ## Decision
 
-This report is a first integration diagnostic. `shadow` measures component error
-without changing audio. `replace` shows how much the complete rendered chain
-changes when the neural counterpart feeds the rest of Nox30.
+{_render_decision(result)}
 """,
         encoding="utf-8",
     )
@@ -202,3 +230,50 @@ changes when the neural counterpart feeds the rest of Nox30.
 
 def _format_optional_v(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.6f} V"
+
+
+def _render_reference_comparisons(
+    analytic: ComparisonMetrics | None,
+    replace: ComparisonMetrics | None,
+) -> str:
+    if analytic is None or replace is None:
+        return ""
+    return f"""## NAM Reference Comparison
+
+| Render | Gain corr dB | Null rel dB | Log-spectral dB | Envelope dB |
+| --- | ---: | ---: | ---: | ---: |
+| Analytic vs NAM | {analytic.gain_db:.2f} | {analytic.null_relative_db:.2f} | {analytic.log_spectral_distance_db:.2f} | {analytic.envelope_error_db:.2f} |
+| Replace vs NAM | {replace.gain_db:.2f} | {replace.null_relative_db:.2f} | {replace.log_spectral_distance_db:.2f} | {replace.envelope_error_db:.2f} |
+
+"""
+
+
+def _render_decision(result: IntegratedNeuralReport) -> str:
+    lines = [
+        "This report is an integration diagnostic. `shadow` measures component error without changing audio.",
+        "`replace` shows how much the complete rendered chain changes when the neural counterpart feeds the rest of Nox30.",
+        "",
+    ]
+    if result.shadow_error_avg_v is not None:
+        lines.append(
+            f"- Shadow first-stage average error is `{result.shadow_error_avg_v:.6f} V`; this is still too high for promotion."
+        )
+    lines.append(
+        f"- Replace-vs-analytic null residual is `{result.replace_vs_analytic.null_relative_db:.2f} dB`, so the neural cell is audibly changing the chain."
+    )
+    if result.analytic_vs_reference is not None and result.replace_vs_reference is not None:
+        analytic = result.analytic_vs_reference
+        replace = result.replace_vs_reference
+        lines.append(
+            f"- Against NAM, replace changes log-spectral distance from `{analytic.log_spectral_distance_db:.2f} dB` to `{replace.log_spectral_distance_db:.2f} dB`."
+        )
+        lines.append(
+            f"- Against NAM, replace changes null residual from `{analytic.null_relative_db:.2f} dB` to `{replace.null_relative_db:.2f} dB`."
+        )
+    lines.extend(
+        [
+            "",
+            "Conclusion: keep this neural cell as a working integration probe. It is not promoted as a better Nox30 component until the local shadow error and replace residual improve materially.",
+        ]
+    )
+    return "\n".join(lines)

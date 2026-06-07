@@ -68,19 +68,23 @@ uv --project lab run greybound-lab spice-dataset \
 ```
 
 This first dataset is a small multi-stimulus corpus. It runs generated SPICE
-netlists for several 1 kHz sine levels plus two-tone IMD cases, writes raw
-traces, packs a `.npz`, and records hashes, node roles, train/validation/test
-splits, component values, and generated netlists. It is useful for the first
-trainer/export smoke test, but it is not yet broad enough for final tube-stage
-acceptance.
+netlists for several 1 kHz sine levels, two-tone IMD cases, and first
+burst/decay dynamic probes. It writes raw traces, packs a `.npz`, and records
+hashes, node roles, train/validation/test splits, component values, and
+generated netlists. It is useful for trainer/export iteration, but it is not yet
+broad enough for final tube-stage acceptance.
 
-Train the first experimental neural-cell MLP from that dataset:
+Train the current experimental neural-cell MLP from that dataset:
 
 ```sh
 uv --project lab run --with torch greybound-lab train-neural-cell \
   --cell common-cathode-12ax7-mlp \
   --dataset-manifest lab/datasets/spice/common-cathode-12ax7.dataset.json \
-  --output-dir lab/models/common-cathode-12ax7-mlp-v1
+  --output-dir lab/models/common-cathode-12ax7-mlp-current \
+  --epochs 1200 \
+  --hidden-size 32 \
+  --learning-rate 0.0005 \
+  --stride 8
 ```
 
 The trainer writes:
@@ -101,18 +105,18 @@ The Rust core has an experimental loader for this artifact shape:
 - activation: `tanh`,
 - weight format: `greybound-bin-v1`.
 
-This loader is not wired into the live audio path yet. It exists to prove that
-the Rust side can parse the source-of-truth artifact and run deterministic
-sample/block inference before we decide how to integrate neural cells into amp
-models.
+This loader now has an explicit Nox30 first-stage integration path for R&D. It
+exists to prove that the Rust side can parse the source-of-truth artifact, run
+deterministic sample/block inference, and insert a neural counterpart in
+`shadow` or `replace` mode without making it a default live model.
 
 Export Python reference vectors and check the generated artifact with the Rust
 loader:
 
 ```sh
 uv --project lab run greybound-lab export-neural-cell-vectors \
-  --descriptor lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
-  --output lab/models/common-cathode-12ax7-mlp-v1/equivalence-vectors.json
+  --descriptor lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
+  --output lab/models/common-cathode-12ax7-mlp-current/equivalence-vectors.json
 
 make lab-check-neural-cell-rust
 ```
@@ -125,15 +129,18 @@ Evaluate the artifact against the SPICE dataset in physical units:
 
 ```sh
 uv --project lab run greybound-lab evaluate-neural-cell \
-  --descriptor lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
+  --descriptor lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
   --dataset-manifest lab/datasets/spice/common-cathode-12ax7.dataset.json \
-  --report lab/models/common-cathode-12ax7-mlp-v1/spice-evaluation.md \
-  --stride 32
+  --report lab/models/common-cathode-12ax7-mlp-current/spice-evaluation.md \
+  --stride 16
 ```
 
-The first local run shows the expected pattern for a static smoke-test MLP: it
-beats the zero baseline overall, but it is still weak on the hot held-out sine
-case. Treat that as a pipeline success and a model-quality warning.
+The current local run evaluates 10 stimuli and 23,760 decimated samples. It
+lands around `55 mV` weighted RMSE against a `544 mV` zero baseline, so it is a
+real fitted cell, not just a wiring proof. The hot held-out sine is still the
+weak point at about `193 mV` RMSE, which keeps it below promotion quality. The
+first dynamic burst/decay probes are not hard enough to prove a memory model
+yet; they are mostly a dataset contract for the next greybox iteration.
 
 The Rust core has a preallocated `NeuralCellRuntime` for future audio
 integration. It is validated by generated Python/Rust vectors. Nox30 can run a
@@ -156,7 +163,7 @@ target/release/greybound-cli \
   --period-size 16 \
   --ir lab/references/tone3000-irs/celestion.wav \
   --monitor \
-  --neural-cell nox30.first_stage=lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json \
+  --neural-cell nox30.first_stage=lab/models/common-cathode-12ax7-mlp-current/model.greybound.json \
   --neural-cell-mode shadow
 ```
 
@@ -173,8 +180,8 @@ make lab-evaluate-integrated-neural-cell
 This renders three offline files from the same rig and input: analytic Nox30,
 shadow Nox30 with monitor telemetry, and replace Nox30 where the neural cell
 drives the rest of the amp. The command writes the WAVs under
-`lab/reports/integrated-neural-first-stage/` and the Markdown report at
-`lab/reports/integrated-neural-first-stage.md`.
+`lab/reports/integrated-neural-first-stage-anchor-current/` and the Markdown
+report at `lab/reports/integrated-neural-first-stage-anchor-current.md`.
 
 The report is deliberately a diagnostic gate. Shadow error measures the local
 cell mismatch in volts while the audio path stays analytic. Replace-vs-analytic
@@ -213,15 +220,16 @@ uv --project lab run greybound-lab sweep-rig-vs-reference \
   --output-db -12
 ```
 
-The current local analytic report shows about `80 mV` weighted RMSE versus about
-`245 mV` for the first static MLP. That means the neural artifact is useful for
-proving the pipeline, but it is not a better replacement than the current Rust
-cell. A diagnostic gain/latency correction only reduces the analytic residual to
-about `70 mV`, so the remaining error is not mostly a trivial level or timing
-offset. Treat the residual as model-shape evidence: nonlinear transfer, bias
-dynamics, discretization, or fixture mismatch. The same report now includes
-harmonic and IMD shape checks; current THD/IMD deltas are small, which pushes the
-next investigation toward dynamic state and fixture equivalence rather than a
+The current local analytic report shows about `80 mV` weighted RMSE before
+diagnostic alignment and about `70 mV` after a gain/latency correction. The
+current static MLP is now in the same range at about `55 mV` on the broader
+dataset, but this is not enough to promote it: integrated replacement still
+changes the Nox30 chain materially and only slightly improves the NAM reference
+metrics. Treat the
+residual as model-shape evidence: nonlinear transfer, bias dynamics,
+discretization, or fixture mismatch. The same report includes harmonic and IMD
+shape checks; current THD/IMD deltas are small, which pushes the next
+investigation toward dynamic state and fixture equivalence rather than only a
 larger static curve fit.
 
 Download public TONE3000 DI input WAV files for local NAM and Greybound

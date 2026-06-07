@@ -96,8 +96,12 @@ def test_common_cathode_dataset_cases_cover_splits(tmp_path: Path) -> None:
 
     assert splits == {"train", "validation", "test"}
     assert any(case.kind == "two_tone_imd" for case in cases)
+    assert any(case.kind == "dynamic_burst" and case.split == "train" for case in cases)
+    assert any(case.kind == "dynamic_decay" and case.split == "test" for case in cases)
     assert any(case.stimulus_id == "sine_1khz_120mv" and case.split == "test" for case in cases)
 
-    netlist = common_cathode_generated_netlist(cases[0], tmp_path / "case.dat")
+    dynamic_case = next(case for case in cases if case.kind == "dynamic_burst")
+    netlist = common_cathode_generated_netlist(dynamic_case, tmp_path / "case.dat")
     assert "BVIN in 0" in netlist
+    assert "tanh((time-0.032)" in netlist
     assert "12AX7_KOREN" in netlist

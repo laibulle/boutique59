@@ -49,6 +49,7 @@ class CommonCathodeDatasetCase:
     expression: str
     parameters: dict[str, float | str]
     split: str
+    settle_time_s: float = 0.030
     transient_stop_s: float = 0.060
     transient_step_s: float = 1.0e-6
 
@@ -206,6 +207,60 @@ def common_cathode_dataset_cases() -> list[CommonCathodeDatasetCase]:
             expression="0.040*sin(2*pi*997*time)+0.040*sin(2*pi*1499*time)",
             parameters={"first_hz": 997.0, "second_hz": 1499.0, "combined_peak_v": 0.080},
             split="test",
+        ),
+        CommonCathodeDatasetCase(
+            stimulus_id="sine_burst_1khz_80mv",
+            kind="dynamic_burst",
+            expression=(
+                "0.080*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.052)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 1000.0,
+                "amplitude_v": 0.080,
+                "event_start_s": 0.032,
+                "event_stop_s": 0.052,
+                "edge_time_s": 0.0003,
+            },
+            split="train",
+            transient_stop_s=0.080,
+        ),
+        CommonCathodeDatasetCase(
+            stimulus_id="sine_burst_1khz_40mv",
+            kind="dynamic_burst",
+            expression=(
+                "0.040*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.052)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 1000.0,
+                "amplitude_v": 0.040,
+                "event_start_s": 0.032,
+                "event_stop_s": 0.052,
+                "edge_time_s": 0.0003,
+            },
+            split="validation",
+            transient_stop_s=0.080,
+        ),
+        CommonCathodeDatasetCase(
+            stimulus_id="pluck_decay_750hz_90mv",
+            kind="dynamic_decay",
+            expression=(
+                "0.090*sin(2*pi*750*time)"
+                "*exp(-(time-0.032)/0.018)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 750.0,
+                "amplitude_v": 0.090,
+                "event_start_s": 0.032,
+                "decay_time_s": 0.018,
+                "edge_time_s": 0.0003,
+            },
+            split="test",
+            transient_stop_s=0.100,
         ),
     ]
 
@@ -406,7 +461,7 @@ def common_cathode_sweep_dataset_manifest(
 
     return {
         "schema_version": 1,
-        "dataset_id": fixture.name + "-sweep-v1",
+        "dataset_id": fixture.name + "-sweep-v2",
         "fixture_id": fixture.name,
         "cell_kind": "triode_gain_stage",
         "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -459,7 +514,7 @@ def common_cathode_sweep_dataset_manifest(
                 "parameters": {
                     **case.parameters,
                     "transient_stop_s": case.transient_stop_s,
-                    "settle_time_s": 0.030,
+                    "settle_time_s": case.settle_time_s,
                 },
             }
             for case in cases
@@ -478,14 +533,17 @@ def common_cathode_sweep_dataset_manifest(
             "policy": (
                 "Train covers low/nominal/hot sine plus a nominal two-tone case. "
                 "Validation holds out an intermediate sine level. Test holds out "
-                "an extra-hot sine and a hotter two-tone IMD case."
+                "an extra-hot sine and a hotter two-tone IMD case. Dynamic burst "
+                "and decay cases probe whether static curve fits survive onset and "
+                "release behavior."
             ),
         },
         "artifacts": artifacts,
         "notes": (
             "First multi-stimulus common-cathode dataset. It is suitable for a "
-            "baseline MLP/TCN training smoke test, but still lacks source/load "
-            "impedance sweeps, B+ perturbation, component tolerances, and real DI."
+            "baseline MLP/TCN training smoke test and now includes first dynamic "
+            "burst/decay probes. It still lacks source/load impedance sweeps, B+ "
+            "perturbation, component tolerances, and real DI."
         ),
     }
 

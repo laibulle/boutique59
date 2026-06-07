@@ -66,11 +66,11 @@ def main() -> None:
     )
     train_cell.add_argument("--cell", required=True, choices=["common-cathode-12ax7-mlp"])
     train_cell.add_argument("--dataset-manifest", required=True, type=Path)
-    train_cell.add_argument("--output-dir", type=Path, default=Path("lab/models/common-cathode-12ax7-mlp-v1"))
-    train_cell.add_argument("--epochs", type=int, default=300)
-    train_cell.add_argument("--hidden-size", type=int, default=16)
-    train_cell.add_argument("--learning-rate", type=float, default=1.0e-3)
-    train_cell.add_argument("--stride", type=int, default=16)
+    train_cell.add_argument("--output-dir", type=Path, default=Path("lab/models/common-cathode-12ax7-mlp-current"))
+    train_cell.add_argument("--epochs", type=int, default=1200)
+    train_cell.add_argument("--hidden-size", type=int, default=32)
+    train_cell.add_argument("--learning-rate", type=float, default=5.0e-4)
+    train_cell.add_argument("--stride", type=int, default=8)
     train_cell.add_argument("--seed", type=int, default=59)
 
     export_vectors = subparsers.add_parser(
@@ -100,8 +100,16 @@ def main() -> None:
     integrated_cell.add_argument("--rig", type=Path, default=Path("rigs/nox30-driven.json5"))
     integrated_cell.add_argument("--input-wav", type=Path, default=Path("lab/references/tone3000-inputs/Brit - Guitar.wav"))
     integrated_cell.add_argument("--binary", type=Path, default=Path("target/release/greybound-cli"))
-    integrated_cell.add_argument("--output-dir", type=Path, default=Path("lab/reports/integrated-neural-first-stage"))
-    integrated_cell.add_argument("--report", type=Path, default=Path("lab/reports/integrated-neural-first-stage.md"))
+    integrated_cell.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("lab/reports/integrated-neural-first-stage-anchor-current"),
+    )
+    integrated_cell.add_argument(
+        "--report",
+        type=Path,
+        default=Path("lab/reports/integrated-neural-first-stage-anchor-current.md"),
+    )
     integrated_cell.add_argument("--render-seconds", type=float, default=20.0)
     integrated_cell.add_argument("--sample-rate", type=int, default=48_000)
     integrated_cell.add_argument("--period-size", type=int, default=16)
@@ -110,6 +118,7 @@ def main() -> None:
     integrated_cell.add_argument("--ir", action="store_true")
     integrated_cell.add_argument("--ir-wav", type=Path, default=DEFAULT_IR_WAV)
     integrated_cell.add_argument("--segments", type=Path)
+    integrated_cell.add_argument("--reference-wav", type=Path)
 
     inputs = subparsers.add_parser(
         "download-tone3000-inputs",
@@ -327,6 +336,7 @@ def run_evaluate_integrated_neural_cell(args: argparse.Namespace) -> None:
         ir_enabled=args.ir,
         ir_wav=args.ir_wav,
         segments=args.segments,
+        reference_wav=args.reference_wav,
     )
     print(f"wrote {args.report}")
     print(f"replace residual {result.replace_vs_analytic.null_relative_db:.2f} dB relative")

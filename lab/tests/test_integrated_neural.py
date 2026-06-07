@@ -55,10 +55,13 @@ def test_evaluate_integrated_neural_cell_renders_three_modes(monkeypatch, tmp_pa
         output_dir=tmp_path / "renders",
         report=tmp_path / "report.md",
         render_seconds=1.0,
+        reference_wav=Path("lab/reports/nam.wav"),
     )
 
     assert [call.get("neural_cell_mode") for call in calls] == [None, "shadow", "replace"]
     assert calls[0].get("neural_cell") is None
     assert calls[1]["neural_cell"] == ("nox30.first_stage", Path("lab/models/cell/model.greybound.json"))
     assert result.shadow_error_avg_v == 0.01
-    assert (tmp_path / "report.md").exists()
+    assert result.analytic_vs_reference is not None
+    assert result.replace_vs_reference is not None
+    assert "NAM Reference Comparison" in (tmp_path / "report.md").read_text(encoding="utf-8")

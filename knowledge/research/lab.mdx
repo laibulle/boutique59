@@ -239,12 +239,13 @@ The command writes:
 - `common-cathode-12ax7.dataset.json`.
 
 This is the first small multi-stimulus corpus. It runs generated SPICE netlists
-for several 1 kHz sine levels, two-tone IMD cases, and first burst/decay
-dynamic probes. It writes raw traces, packs a `.npz`, and records hashes, node
-roles, train/validation/test splits, component values, generated netlists, and
-operating point. Its purpose is to make the SPICE-to-training contract
-executable before we expand to source/load impedance sweeps, B+ perturbation,
-component tolerance sweeps, stronger transient probes, and real DI windows.
+for several 1 kHz sine levels, two-tone IMD cases, first burst/decay dynamic
+probes, and a deliberately hard bias-recovery stress probe. It writes raw
+traces, packs a `.npz`, and records hashes, node roles, train/validation/test
+splits, component values, generated netlists, and operating point. Its purpose
+is to make the SPICE-to-training contract executable before we expand to
+source/load impedance sweeps, B+ perturbation, component tolerance sweeps,
+stronger transient probes, and real DI windows.
 
 Train the current experimental MLP artifact with:
 
@@ -356,15 +357,21 @@ full chain toward or away from the external oracle.
 
 Current integrated result:
 
-- shadow first-stage average error: about `0.143 V`,
-- replace-vs-analytic null residual: about `-13.2 dB`,
-- replace-vs-analytic log-spectral distance: about `5.39 dB`,
+- shadow first-stage average error: about `0.137 V`,
+- replace-vs-analytic null residual: about `-24.7 dB`,
+- replace-vs-analytic log-spectral distance: about `3.71 dB`,
 - analytic-vs-NAM log-spectral distance: about `12.43 dB`,
-- replace-vs-NAM log-spectral distance: about `12.32 dB`.
+- replace-vs-NAM log-spectral distance: about `12.68 dB`,
+- program-material NAM log-spectral distance after preroll: `10.87 dB` analytic
+  versus `11.10 dB` neural replace.
 
 The neural path is therefore integrated and measurable, but not promoted. The
-The working artifact moves the NAM metrics only slightly while still changing
-the analytic chain materially and keeping a high local shadow error.
+working artifact is now much closer to the analytic chain after high-amplitude
+coverage was added, but it does not improve the NAM-facing log-spectral metric.
+Segment deltas show the largest apparent regression in the quiet opening
+preroll; after excluding preroll the NAM metric still moves slightly away, but
+by a smaller amount. Promotion still needs local and external-reference evidence
+to agree.
 
 Evaluate the artifact against the SPICE dataset in physical units:
 
@@ -376,13 +383,14 @@ uv --project lab run greybound-lab evaluate-neural-cell \
   --stride 16
 ```
 
-The current report evaluates 10 stimuli and 23,760 decimated samples. The
-aggregate RMSE is about `55 mV` against a zero-baseline RMSE around `544 mV`,
-so the artifact learns useful shape and is comparable to the current analytic
-common-cathode baseline. The hot held-out sine remains the weak point:
-`sine_1khz_120mv` is about `193 mV` RMSE, or roughly `15%` relative RMSE. The
-new burst/decay cases are useful as a dataset contract, but they are not hard
-enough yet to prove a stateful neural model.
+The current report evaluates 13 stimuli and 38,763 decimated samples. Adding a
+400 mV sine to the training split and a 300 mV sine to validation changes the
+interpretation materially: the previous bias-recovery failure was mostly
+high-amplitude domain coverage, not proven memory. Weighted RMSE is now about
+`49.6 mV`; the `bias_recovery_probe_20mv_after_400mv` test is about `67.8 mV`
+instead of the earlier `1.77 V`. The history-probe gain delta remains near zero,
+which means this fixture exposes domain coverage more strongly than low-level
+post-stress gain memory.
 
 Compare the existing Rust analytic common-cathode stage against the same SPICE
 dataset with:
@@ -391,11 +399,11 @@ dataset with:
 make lab-evaluate-analytic-common-cathode NEURAL_STRIDE=32
 ```
 
-The current analytic baseline is about `80 mV` weighted RMSE before diagnostic
-alignment and about `70 mV` after a small gain/latency correction. The current
-static MLP is now in the same range at about `55 mV` on the broader dataset, but
-the integrated Nox30 result still does not justify promotion. The immediate
-research target is now dynamic-state evidence: decide whether neural or fitted
+The static MLP is now in the same range as the analytic baseline on the expanded
+SPICE dataset and is much closer to the analytic Nox30 chain in replacement
+mode. The integrated Nox30 result still does not justify promotion because it
+moves the NAM log-spectral metric in the wrong direction. The immediate research
+target is now better external alignment: decide whether neural or fitted
 components can reduce held-out SPICE error and full-chain NAM distance without
 creating a large replace-vs-analytic residual.
 

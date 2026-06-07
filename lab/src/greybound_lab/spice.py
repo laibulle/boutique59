@@ -181,10 +181,24 @@ def common_cathode_dataset_cases() -> list[CommonCathodeDatasetCase]:
             split="train",
         ),
         CommonCathodeDatasetCase(
+            stimulus_id="sine_1khz_400mv",
+            kind="sine_level_sweep",
+            expression="0.400*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.400},
+            split="train",
+        ),
+        CommonCathodeDatasetCase(
             stimulus_id="sine_1khz_40mv",
             kind="sine_level_sweep",
             expression="0.040*sin(2*pi*1000*time)",
             parameters={"frequency_hz": 1000.0, "amplitude_v": 0.040},
+            split="validation",
+        ),
+        CommonCathodeDatasetCase(
+            stimulus_id="sine_1khz_300mv",
+            kind="sine_level_sweep",
+            expression="0.300*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.300},
             split="validation",
         ),
         CommonCathodeDatasetCase(
@@ -261,6 +275,35 @@ def common_cathode_dataset_cases() -> list[CommonCathodeDatasetCase]:
             },
             split="test",
             transient_stop_s=0.100,
+        ),
+        CommonCathodeDatasetCase(
+            stimulus_id="bias_recovery_probe_20mv_after_400mv",
+            kind="dynamic_bias_recovery",
+            expression=(
+                "0.020*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.052)/0.0003))"
+                "+0.400*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.060)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.130)/0.0003))"
+                "+0.020*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.150)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.190)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 1000.0,
+                "probe_amplitude_v": 0.020,
+                "stress_amplitude_v": 0.400,
+                "pre_probe_start_s": 0.032,
+                "pre_probe_stop_s": 0.052,
+                "stress_start_s": 0.060,
+                "stress_stop_s": 0.130,
+                "post_probe_start_s": 0.150,
+                "post_probe_stop_s": 0.190,
+                "edge_time_s": 0.0003,
+            },
+            split="test",
+            transient_stop_s=0.210,
         ),
     ]
 
@@ -461,7 +504,7 @@ def common_cathode_sweep_dataset_manifest(
 
     return {
         "schema_version": 1,
-        "dataset_id": fixture.name + "-sweep-v2",
+        "dataset_id": fixture.name + "-sweep-current",
         "fixture_id": fixture.name,
         "cell_kind": "triode_gain_stage",
         "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -532,18 +575,22 @@ def common_cathode_sweep_dataset_manifest(
             "test": test,
             "policy": (
                 "Train covers low/nominal/hot sine plus a nominal two-tone case. "
-                "Validation holds out an intermediate sine level. Test holds out "
-                "an extra-hot sine and a hotter two-tone IMD case. Dynamic burst "
-                "and decay cases probe whether static curve fits survive onset and "
-                "release behavior."
+                "Training also includes a deliberately high 400 mV sine so the "
+                "bias-recovery stress test is not merely an amplitude extrapolation "
+                "case. Validation holds out intermediate 40 mV and 300 mV sine "
+                "levels. Test holds out an extra-hot sine and a hotter two-tone IMD "
+                "case. Dynamic burst and decay cases probe whether static curve "
+                "fits survive onset and release behavior. The bias recovery probe "
+                "repeats the same small signal before and after a hot stress window "
+                "to expose state memory."
             ),
         },
         "artifacts": artifacts,
         "notes": (
             "First multi-stimulus common-cathode dataset. It is suitable for a "
             "baseline MLP/TCN training smoke test and now includes first dynamic "
-            "burst/decay probes. It still lacks source/load impedance sweeps, B+ "
-            "perturbation, component tolerances, and real DI."
+            "burst/decay and bias-recovery probes. It still lacks source/load "
+            "impedance sweeps, B+ perturbation, component tolerances, and real DI."
         ),
     }
 

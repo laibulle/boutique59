@@ -68,11 +68,12 @@ uv --project lab run greybound-lab spice-dataset \
 ```
 
 This first dataset is a small multi-stimulus corpus. It runs generated SPICE
-netlists for several 1 kHz sine levels, two-tone IMD cases, and first
-burst/decay dynamic probes. It writes raw traces, packs a `.npz`, and records
-hashes, node roles, train/validation/test splits, component values, and
-generated netlists. It is useful for trainer/export iteration, but it is not yet
-broad enough for final tube-stage acceptance.
+netlists for several 1 kHz sine levels, two-tone IMD cases, first burst/decay
+dynamic probes, and a deliberately hard bias-recovery stress probe. It writes
+raw traces, packs a `.npz`, and records hashes, node roles,
+train/validation/test splits, component values, and generated netlists. It is
+useful for trainer/export iteration, but it is not yet broad enough for final
+tube-stage acceptance.
 
 Train the current experimental neural-cell MLP from that dataset:
 
@@ -135,12 +136,12 @@ uv --project lab run greybound-lab evaluate-neural-cell \
   --stride 16
 ```
 
-The current local run evaluates 10 stimuli and 23,760 decimated samples. It
-lands around `55 mV` weighted RMSE against a `544 mV` zero baseline, so it is a
-real fitted cell, not just a wiring proof. The hot held-out sine is still the
-weak point at about `193 mV` RMSE, which keeps it below promotion quality. The
-first dynamic burst/decay probes are not hard enough to prove a memory model
-yet; they are mostly a dataset contract for the next greybox iteration.
+The current local run evaluates 13 stimuli and 38,763 decimated samples. Adding
+a 400 mV sine to train and a 300 mV sine to validation shows that the earlier
+bias-recovery failure was mostly high-amplitude coverage, not proven memory.
+Weighted RMSE is now about `49.6 mV`, and the
+`bias_recovery_probe_20mv_after_400mv` test is about `67.8 mV` instead of the
+earlier `1.77 V`.
 
 The Rust core has a preallocated `NeuralCellRuntime` for future audio
 integration. It is validated by generated Python/Rust vectors. Nox30 can run a
@@ -220,17 +221,16 @@ uv --project lab run greybound-lab sweep-rig-vs-reference \
   --output-db -12
 ```
 
-The current local analytic report shows about `80 mV` weighted RMSE before
-diagnostic alignment and about `70 mV` after a gain/latency correction. The
-current static MLP is now in the same range at about `55 mV` on the broader
-dataset, but this is not enough to promote it: integrated replacement still
-changes the Nox30 chain materially and only slightly improves the NAM reference
-metrics. Treat the
-residual as model-shape evidence: nonlinear transfer, bias dynamics,
-discretization, or fixture mismatch. The same report includes harmonic and IMD
-shape checks; current THD/IMD deltas are small, which pushes the next
-investigation toward dynamic state and fixture equivalence rather than only a
-larger static curve fit.
+The static MLP is now in the same range as the analytic baseline on the expanded
+SPICE dataset and is much closer to the analytic Nox30 chain in replacement
+mode. It still does not improve the NAM log-spectral metric, so it is not
+promoted. The integrated report now separates quiet preroll from program
+material; excluding preroll, NAM log-spectral distance is about `10.87 dB`
+analytic versus `11.10 dB` neural replace. Treat the residual as model-shape
+evidence: nonlinear transfer, bias dynamics, discretization, or fixture
+mismatch. The same report includes harmonic and IMD shape checks; current
+THD/IMD deltas are small, which pushes the next investigation toward external
+alignment and fixture equivalence rather than only a larger static curve fit.
 
 Download public TONE3000 DI input WAV files for local NAM and Greybound
 integration tests:

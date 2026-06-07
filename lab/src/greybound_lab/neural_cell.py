@@ -49,6 +49,18 @@ class NeuralCellEvaluationRow:
     zero_baseline_rmse_v: float
 
 
+@dataclass(frozen=True)
+class NeuralCellHistoryProbeRow:
+    stimulus_id: str
+    reference_pre_gain_db: float
+    reference_post_gain_db: float
+    reference_delta_db: float
+    prediction_pre_gain_db: float
+    prediction_post_gain_db: float
+    prediction_delta_db: float
+    delta_error_db: float
+
+
 def train_common_cathode_mlp(
     *,
     manifest_path: Path,
@@ -254,6 +266,7 @@ def evaluate_neural_cell_against_spice(
     dataset_path = _resolve_manifest_path(dataset_manifest_path, _artifact_path(manifest, "output"))
     npz = np.load(dataset_path)
     rows = []
+    history_rows = []
     split_by_id = _split_by_stimulus_id(manifest)
     for stimulus in manifest["stimuli"]:
         stimulus_id = str(stimulus["id"])
@@ -278,6 +291,17 @@ def evaluate_neural_cell_against_spice(
                 prediction_v=case_prediction,
             )
         )
+        if str(stimulus["kind"]) == "dynamic_bias_recovery":
+            history_rows.append(
+                _history_probe_row(
+                    stimulus_id=stimulus_id,
+                    time_s=time_s,
+                    input_v=input_v,
+                    reference_v=reference_v,
+                    prediction_v=infer_artifact_numpy(descriptor_path, input_v.astype(np.float32)).astype(np.float32),
+                    parameters=stimulus.get("parameters", {}),
+                )
+            )
     descriptor = _read_json(descriptor_path)
     write_evaluation_report(
         report_path,
@@ -285,6 +309,7 @@ def evaluate_neural_cell_against_spice(
         dataset_manifest_path=dataset_manifest_path,
         descriptor_path=descriptor_path,
         rows=rows,
+        history_rows=history_rows,
         stride=stride,
         split=split,
     )
@@ -452,6 +477,7 @@ def write_evaluation_report(
     dataset_manifest_path: Path,
     descriptor_path: Path,
     rows: list[NeuralCellEvaluationRow],
+    history_rows: list[NeuralCellHistoryProbeRow],
     stride: int,
     split: str,
 ) -> None:
@@ -472,6 +498,7 @@ def write_evaluation_report(
         for row in rows
     )
     aggregate = _aggregate_rows(rows)
+    history_section = _render_history_probe_section(history_rows)
     path.write_text(
         f"""# Neural Cell SPICE Evaluation: {descriptor.get('artifact_id', 'unknown')}
 
@@ -513,7 +540,10 @@ live audio use.
 Compare RMSE against the zero baseline. A useful model should beat the baseline
 on held-out stimuli, not only on training stimuli. Large relative error on hot
 sine or two-tone cases means the static MLP is not yet capturing the nonlinear
-shape needed for a tube-cell replacement.
+shape needed for a tube-cell replacement. Large relative error on the bias
+recovery stress probe is a domain-boundary signal: first check high-amplitude
+coverage, then check whether residual error remains after coverage is added.
+{history_section}
 """,
         encoding="utf-8",
     )
@@ -564,6 +594,88 @@ def _evaluation_row(
         relative_rmse=rmse / max(reference_rms, 1.0e-12),
         zero_baseline_rmse_v=zero_baseline_rmse,
     )
+
+
+def _history_probe_row(
+    *,
+    stimulus_id: str,
+    time_s: np.ndarray,
+    input_v: np.ndarray,
+    reference_v: np.ndarray,
+    prediction_v: np.ndarray,
+    parameters: dict[str, Any],
+) -> NeuralCellHistoryProbeRow:
+    pre_start = float(parameters["pre_probe_start_s"])
+    pre_stop = float(parameters["pre_probe_stop_s"])
+    post_start = float(parameters["post_probe_start_s"])
+    post_stop = float(parameters["post_probe_stop_s"])
+    reference_pre_gain = _window_gain_db(time_s, input_v, reference_v, pre_start, pre_stop)
+    reference_post_gain = _window_gain_db(time_s, input_v, reference_v, post_start, post_stop)
+    prediction_pre_gain = _window_gain_db(time_s, input_v, prediction_v, pre_start, pre_stop)
+    prediction_post_gain = _window_gain_db(time_s, input_v, prediction_v, post_start, post_stop)
+    reference_delta = reference_post_gain - reference_pre_gain
+    prediction_delta = prediction_post_gain - prediction_pre_gain
+    return NeuralCellHistoryProbeRow(
+        stimulus_id=stimulus_id,
+        reference_pre_gain_db=reference_pre_gain,
+        reference_post_gain_db=reference_post_gain,
+        reference_delta_db=reference_delta,
+        prediction_pre_gain_db=prediction_pre_gain,
+        prediction_post_gain_db=prediction_post_gain,
+        prediction_delta_db=prediction_delta,
+        delta_error_db=prediction_delta - reference_delta,
+    )
+
+
+def _window_gain_db(
+    time_s: np.ndarray,
+    input_v: np.ndarray,
+    output_v: np.ndarray,
+    start_s: float,
+    stop_s: float,
+) -> float:
+    margin_s = min((stop_s - start_s) * 0.20, 0.003)
+    mask = (time_s >= start_s + margin_s) & (time_s <= stop_s - margin_s)
+    if not np.any(mask):
+        mask = (time_s >= start_s) & (time_s <= stop_s)
+    input_rms = _rms(_remove_mean(input_v[mask]))
+    output_rms = _rms(_remove_mean(output_v[mask]))
+    return 20.0 * math.log10((output_rms + 1.0e-30) / (input_rms + 1.0e-30))
+
+
+def _render_history_probe_section(rows: list[NeuralCellHistoryProbeRow]) -> str:
+    if not rows:
+        return ""
+    table = "\n".join(
+        "| `{}` | {:.2f} | {:.2f} | {:.2f} | {:.2f} | {:.2f} | {:.2f} | {:.2f} |".format(
+            row.stimulus_id,
+            row.reference_pre_gain_db,
+            row.reference_post_gain_db,
+            row.reference_delta_db,
+            row.prediction_pre_gain_db,
+            row.prediction_post_gain_db,
+            row.prediction_delta_db,
+            row.delta_error_db,
+        )
+        for row in rows
+    )
+    return f"""
+
+## History Probe Metrics
+
+These rows compare the gain of the same low-level probe before and after a hot
+stress window. A static input-to-output model can fit the instantaneous transfer
+curve, but it cannot know whether the same input sample happened before or after
+cathode-bias recovery unless history is encoded in the input or model state.
+
+| Stimulus | Ref pre gain dB | Ref post gain dB | Ref delta dB | Pred pre gain dB | Pred post gain dB | Pred delta dB | Delta error dB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+{table}
+"""
+
+
+def _remove_mean(values: np.ndarray) -> np.ndarray:
+    return values - float(np.mean(values)) if values.size else values
 
 
 def _aggregate_rows(rows: list[NeuralCellEvaluationRow]) -> dict[str, float | int]:

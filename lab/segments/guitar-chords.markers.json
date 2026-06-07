@@ -4,16 +4,23 @@
   "notes": "Initial hand-authored regions for coarse Greybound render comparison. These are analysis anchors, not musical ground truth.",
   "segments": [
     {
-      "name": "opening_attack",
-      "kind": "attack",
+      "name": "opening_preroll",
+      "kind": "preroll",
       "start_s": 0.00,
       "end_s": 0.35,
-      "notes": "Initial pick/chord transient."
+      "notes": "Low-level preroll before the first real chord. Track startup here, but do not use it as an attack-quality anchor."
+    },
+    {
+      "name": "opening_attack",
+      "kind": "attack",
+      "start_s": 0.35,
+      "end_s": 0.70,
+      "notes": "First real chord transient after the quiet preroll."
     },
     {
       "name": "opening_sustain",
       "kind": "sustain",
-      "start_s": 0.35,
+      "start_s": 0.70,
       "end_s": 1.40
     },
     {

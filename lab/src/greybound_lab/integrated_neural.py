@@ -7,7 +7,7 @@ from pathlib import Path
 from greybound_lab.audio import read_wav_mono
 from greybound_lab.metrics import ComparisonMetrics, compare_signals
 from greybound_lab.render import render_rig
-from greybound_lab.segments import load_segments
+from greybound_lab.segments import SegmentSpec, load_segments
 
 
 SHADOW_RE = re.compile(
@@ -27,6 +27,9 @@ class IntegratedNeuralReport:
     shadow_error_avg_v: float | None
     shadow_error_max_v: float | None
     shadow_error_count: int
+    program_start_s: float | None = None
+    analytic_vs_reference_program: ComparisonMetrics | None = None
+    replace_vs_reference_program: ComparisonMetrics | None = None
 
 
 def evaluate_integrated_neural_cell(
@@ -124,6 +127,9 @@ def evaluate_integrated_neural_cell(
     )
     analytic_vs_reference = None
     replace_vs_reference = None
+    analytic_vs_reference_program = None
+    replace_vs_reference_program = None
+    program_start_s = _program_material_start_s(segment_specs)
     if reference_wav is not None:
         reference = read_wav_mono(reference_wav)
         if analytic.sample_rate != reference.sample_rate or replace.sample_rate != reference.sample_rate:
@@ -142,6 +148,20 @@ def evaluate_integrated_neural_cell(
             max_lag_ms=100.0,
             segments=segment_specs,
         )
+        if program_start_s is not None and program_start_s > 0.0:
+            start = int(round(program_start_s * analytic.sample_rate))
+            analytic_vs_reference_program = compare_signals(
+                analytic.samples[start:],
+                reference.samples[start:],
+                analytic.sample_rate,
+                max_lag_ms=100.0,
+            )
+            replace_vs_reference_program = compare_signals(
+                replace.samples[start:],
+                reference.samples[start:],
+                replace.sample_rate,
+                max_lag_ms=100.0,
+            )
     shadow_avg, shadow_max, shadow_count = parse_shadow_error(shadow_log)
     result = IntegratedNeuralReport(
         analytic_wav=analytic_wav,
@@ -154,6 +174,9 @@ def evaluate_integrated_neural_cell(
         shadow_error_avg_v=shadow_avg,
         shadow_error_max_v=shadow_max,
         shadow_error_count=shadow_count,
+        program_start_s=program_start_s,
+        analytic_vs_reference_program=analytic_vs_reference_program,
+        replace_vs_reference_program=replace_vs_reference_program,
     )
     write_integrated_neural_report(report, result, component, descriptor, rig, input_wav, reference_wav)
     return result
@@ -218,7 +241,11 @@ def write_integrated_neural_report(
 | Log-spectral distance | {metrics.log_spectral_distance_db:.2f} dB |
 | Envelope error | {metrics.envelope_error_db:.2f} dB |
 
+{_render_single_segment_table("Replace vs Analytic Segment Metrics", metrics)}
+
 {_render_reference_comparisons(result.analytic_vs_reference, result.replace_vs_reference)}
+{_render_program_reference_comparisons(result)}
+{_render_reference_segment_deltas(result.analytic_vs_reference, result.replace_vs_reference)}
 
 ## Decision
 
@@ -248,6 +275,81 @@ def _render_reference_comparisons(
 """
 
 
+def _render_program_reference_comparisons(result: IntegratedNeuralReport) -> str:
+    analytic = result.analytic_vs_reference_program
+    replace = result.replace_vs_reference_program
+    if analytic is None or replace is None or result.program_start_s is None:
+        return ""
+    return f"""## NAM Reference Program-Material Comparison
+
+This excludes explicit preroll before `{result.program_start_s:.3f} s`.
+
+| Render | Gain corr dB | Null rel dB | Log-spectral dB | Envelope dB |
+| --- | ---: | ---: | ---: | ---: |
+| Analytic vs NAM | {analytic.gain_db:.2f} | {analytic.null_relative_db:.2f} | {analytic.log_spectral_distance_db:.2f} | {analytic.envelope_error_db:.2f} |
+| Replace vs NAM | {replace.gain_db:.2f} | {replace.null_relative_db:.2f} | {replace.log_spectral_distance_db:.2f} | {replace.envelope_error_db:.2f} |
+
+"""
+
+
+def _render_single_segment_table(title: str, metrics: ComparisonMetrics) -> str:
+    if not metrics.segments:
+        return ""
+    lines = [
+        f"## {title}",
+        "",
+        "| Segment | Kind | Time s | Gain dB | Null rel dB | Log-spectral dB | Envelope dB |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for segment in metrics.segments:
+        lines.append(
+            f"| {segment.name} | {segment.kind} | {segment.start_s:.3f}-{segment.end_s:.3f} | "
+            f"{segment.local_gain_db:.2f} | {segment.null_relative_db:.2f} | "
+            f"{segment.log_spectral_distance_db:.2f} | {segment.envelope_error_db:.2f} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _program_material_start_s(segments: list[SegmentSpec] | None) -> float | None:
+    if not segments:
+        return None
+    starts = [segment.start_s for segment in segments if segment.kind.lower() != "preroll"]
+    return min(starts) if starts else None
+
+
+def _render_reference_segment_deltas(
+    analytic: ComparisonMetrics | None,
+    replace: ComparisonMetrics | None,
+) -> str:
+    if analytic is None or replace is None or not analytic.segments or not replace.segments:
+        return ""
+    replace_by_name = {segment.name: segment for segment in replace.segments}
+    lines = [
+        "## NAM Reference Segment Deltas",
+        "",
+        "Negative deltas mean the neural replacement moved that segment closer to NAM. Positive deltas mean it moved away.",
+        "",
+        "| Segment | Kind | Analytic LSD | Replace LSD | LSD delta | Analytic null | Replace null | Null delta | Analytic env | Replace env | Env delta |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for analytic_segment in analytic.segments:
+        replace_segment = replace_by_name.get(analytic_segment.name)
+        if replace_segment is None:
+            continue
+        lines.append(
+            f"| {analytic_segment.name} | {analytic_segment.kind} | "
+            f"{analytic_segment.log_spectral_distance_db:.2f} | {replace_segment.log_spectral_distance_db:.2f} | "
+            f"{replace_segment.log_spectral_distance_db - analytic_segment.log_spectral_distance_db:.2f} | "
+            f"{analytic_segment.null_relative_db:.2f} | {replace_segment.null_relative_db:.2f} | "
+            f"{replace_segment.null_relative_db - analytic_segment.null_relative_db:.2f} | "
+            f"{analytic_segment.envelope_error_db:.2f} | {replace_segment.envelope_error_db:.2f} | "
+            f"{replace_segment.envelope_error_db - analytic_segment.envelope_error_db:.2f} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _render_decision(result: IntegratedNeuralReport) -> str:
     lines = [
         "This report is an integration diagnostic. `shadow` measures component error without changing audio.",
@@ -258,9 +360,14 @@ def _render_decision(result: IntegratedNeuralReport) -> str:
         lines.append(
             f"- Shadow first-stage average error is `{result.shadow_error_avg_v:.6f} V`; this is still too high for promotion."
         )
-    lines.append(
-        f"- Replace-vs-analytic null residual is `{result.replace_vs_analytic.null_relative_db:.2f} dB`, so the neural cell is audibly changing the chain."
-    )
+    replace_null = result.replace_vs_analytic.null_relative_db
+    if replace_null > -18.0:
+        replace_note = "the neural cell is still strongly changing the rendered chain."
+    elif replace_null > -30.0:
+        replace_note = "the neural cell is much closer to the analytic chain, but the residual is still material."
+    else:
+        replace_note = "the neural cell is close enough to the analytic chain to justify deeper listening and segment review."
+    lines.append(f"- Replace-vs-analytic null residual is `{replace_null:.2f} dB`; {replace_note}")
     if result.analytic_vs_reference is not None and result.replace_vs_reference is not None:
         analytic = result.analytic_vs_reference
         replace = result.replace_vs_reference
@@ -270,10 +377,16 @@ def _render_decision(result: IntegratedNeuralReport) -> str:
         lines.append(
             f"- Against NAM, replace changes null residual from `{analytic.null_relative_db:.2f} dB` to `{replace.null_relative_db:.2f} dB`."
         )
+    if result.analytic_vs_reference_program is not None and result.replace_vs_reference_program is not None:
+        analytic_program = result.analytic_vs_reference_program
+        replace_program = result.replace_vs_reference_program
+        lines.append(
+            f"- Excluding preroll, NAM log-spectral distance changes from `{analytic_program.log_spectral_distance_db:.2f} dB` to `{replace_program.log_spectral_distance_db:.2f} dB`."
+        )
     lines.extend(
         [
             "",
-            "Conclusion: keep this neural cell as a working integration probe. It is not promoted as a better Nox30 component until the local shadow error and replace residual improve materially.",
+            "Conclusion: keep this neural cell as a working integration probe. It is not promoted as a better Nox30 component until local shadow error, replace residual, and NAM-facing metrics all support the change.",
         ]
     )
     return "\n".join(lines)

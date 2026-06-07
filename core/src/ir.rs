@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use realfft::num_complex::Complex32;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use std::io::Cursor;
+use std::path::Path;
 use std::sync::Arc;
 
 pub const CONVOLUTION_LATENCY: usize = 0;
@@ -236,28 +237,18 @@ impl PartitionedConvolver {
 }
 
 fn load_embedded_ir(sample_rate: u32) -> Result<Vec<f32>> {
-    let bytes: &[u8] = match sample_rate {
-        44_100 => include_bytes!(
-            "../../irs/Celestion Vintage30 - Cenzo Townshend Mix/44.1 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
-        ),
-        48_000 => include_bytes!(
-            "../../irs/Celestion Vintage30 - Cenzo Townshend Mix/48.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
-        ),
-        88_200 => include_bytes!(
-            "../../irs/Celestion Vintage30 - Cenzo Townshend Mix/88.2 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
-        ),
-        96_000 => include_bytes!(
-            "../../irs/Celestion Vintage30 - Cenzo Townshend Mix/96.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
-        ),
-        _ => bail!(
-            "no embedded speaker IR for {sample_rate} Hz; supported rates: 44100, 48000, 88200, 96000"
-        ),
-    };
+    if sample_rate != 48_000 {
+        bail!("no reference speaker IR for {sample_rate} Hz; supported rate: 48000");
+    }
 
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../lab/references/tone3000-irs/celestion.wav");
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("could not read reference speaker IR at {}", path.display()))?;
     let mut reader =
-        hound::WavReader::new(Cursor::new(bytes)).context("could not read speaker IR")?;
+        hound::WavReader::new(Cursor::new(bytes)).context("could not decode speaker IR WAV")?;
     if reader.spec().channels != 1 || reader.spec().sample_rate != sample_rate {
-        bail!("embedded speaker IR has an unexpected format");
+        bail!("reference speaker IR has an unexpected format");
     }
 
     reader

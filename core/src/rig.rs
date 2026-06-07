@@ -66,7 +66,7 @@ impl RigConfig {
         let Some(cab) = &self.cab else {
             return Ok(false);
         };
-        if cab.ir != "embedded-v30" {
+        if !matches!(cab.ir.as_str(), "tone3000-celestion" | "embedded-v30") {
             bail!("unknown cab IR '{}'", cab.ir);
         }
         Ok(!cab.bypassed)
@@ -433,7 +433,7 @@ mod tests {
                 bypassed: false,
               },
               cab: {
-                ir: 'embedded-v30',
+                ir: 'tone3000-celestion',
                 bypassed: false,
               },
             }

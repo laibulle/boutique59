@@ -35,7 +35,7 @@
   },
 
   cab: {
-    ir: 'embedded-v30',
+    ir: 'tone3000-celestion',
     bypassed: false,
   },
 }

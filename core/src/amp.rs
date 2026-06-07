@@ -423,8 +423,8 @@ mod tests {
 
     #[test]
     fn standalone_nox30_file_rig_keeps_producing_output() {
-        let mut amp = VoxAmp::with_model(44_100.0, "nox30");
-        let mut speaker = SpeakerStage::from_embedded_ir(44_100).unwrap();
+        let mut amp = VoxAmp::with_model(48_000.0, "nox30");
+        let mut speaker = SpeakerStage::from_embedded_ir(48_000).unwrap();
         let controls = AmpControls {
             volume: 0.76,
             bass: 0.52,
@@ -439,10 +439,10 @@ mod tests {
         let mut second_sums = [0.0; 8];
         let mut second_counts = [0; 8];
 
-        for (sample_idx, input) in samples.into_iter().cycle().take(44_100 * 8).enumerate() {
+        for (sample_idx, input) in samples.into_iter().cycle().take(48_000 * 8).enumerate() {
             let output = speaker.process(amp.process(input, controls), true);
             assert!(output.is_finite());
-            let second = sample_idx / 44_100;
+            let second = sample_idx / 48_000;
             second_sums[second] += output * output;
             second_counts[second] += 1;
         }
@@ -512,8 +512,8 @@ mod tests {
 
     #[test]
     fn nox30_sample_render_metrics_stay_in_fixture_band() {
-        let mut amp = VoxAmp::with_model(44_100.0, "nox30");
-        let mut speaker = SpeakerStage::from_embedded_ir(44_100).unwrap();
+        let mut amp = VoxAmp::with_model(48_000.0, "nox30");
+        let mut speaker = SpeakerStage::from_embedded_ir(48_000).unwrap();
         let controls = AmpControls {
             volume: 0.76,
             bass: 0.52,

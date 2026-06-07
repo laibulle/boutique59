@@ -26,7 +26,7 @@ set filetype=ascii
 op
 print v(platea) v(plateb) v(cath) v(grida) v(gridb) v(bplus)
 tran 1u 100m 0 1u
-wrdata /tmp/boutique59_long_tail_pair_12ax7.dat v(in) v(grida) v(gridb) v(platea) v(plateb) v(cath) v(bplus)
+wrdata /tmp/greybound_long_tail_pair_12ax7.dat v(in) v(grida) v(gridb) v(platea) v(plateb) v(cath) v(bplus)
 quit
 .endc
 

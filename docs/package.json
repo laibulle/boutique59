@@ -1,5 +1,5 @@
 {
-  "name": "boutique59-docs",
+  "name": "greybound-docs",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",

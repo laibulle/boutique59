@@ -25,8 +25,8 @@ use ir::{SpeakerStage, CONVOLUTION_LATENCY};
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
-pub struct Boutique59 {
-    params: Arc<Boutique59Params>,
+pub struct Greybound {
+    params: Arc<GreyboundParams>,
     channels: Vec<SignalChain>,
     speakers: Vec<SpeakerStage>,
     ui_controls: Option<AmpControls>,
@@ -35,7 +35,7 @@ pub struct Boutique59 {
 }
 
 #[derive(Params)]
-struct Boutique59Params {
+struct GreyboundParams {
     #[id = "gain"]
     gain: FloatParam,
     #[id = "bass"]
@@ -68,10 +68,10 @@ struct Boutique59Params {
     overdrive_output: FloatParam,
 }
 
-impl Default for Boutique59 {
+impl Default for Greybound {
     fn default() -> Self {
         Self {
-            params: Arc::new(Boutique59Params::default()),
+            params: Arc::new(GreyboundParams::default()),
             channels: Vec::new(),
             speakers: Vec::new(),
             ui_controls: None,
@@ -81,7 +81,7 @@ impl Default for Boutique59 {
     }
 }
 
-impl Default for Boutique59Params {
+impl Default for GreyboundParams {
     fn default() -> Self {
         Self {
             gain: FloatParam::new(
@@ -176,9 +176,9 @@ impl Default for Boutique59Params {
     }
 }
 
-impl Plugin for Boutique59 {
-    const NAME: &'static str = "Boutique59";
-    const VENDOR: &'static str = "Boutique59";
+impl Plugin for Greybound {
+    const NAME: &'static str = "Greybound";
+    const VENDOR: &'static str = "Greybound";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
     const EMAIL: &'static str = "dev@localhost";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -308,7 +308,7 @@ impl Plugin for Boutique59 {
     }
 }
 
-impl Boutique59 {
+impl Greybound {
     /// Set a float parameter by id (0.0..=1.0 for floats).
     pub fn set_param_value(&mut self, id: &str, _value: f32) {
         match id {
@@ -363,8 +363,8 @@ fn build_signal_chains(
         .collect()
 }
 
-impl ClapPlugin for Boutique59 {
-    const CLAP_ID: &'static str = "com.boutique59.graybox-amp";
+impl ClapPlugin for Greybound {
+    const CLAP_ID: &'static str = "com.greybound.graybox-amp";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("Nox30 circuit-informed guitar amp");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
@@ -375,11 +375,11 @@ impl ClapPlugin for Boutique59 {
     ];
 }
 
-impl Vst3Plugin for Boutique59 {
-    const VST3_CLASS_ID: [u8; 16] = *b"Boutique59GrayAm";
+impl Vst3Plugin for Greybound {
+    const VST3_CLASS_ID: [u8; 16] = *b"GreyboundGrayAm";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Fx, Vst3SubCategory::Distortion];
 }
 
-nih_export_clap!(Boutique59);
-nih_export_vst3!(Boutique59);
+nih_export_clap!(Greybound);
+nih_export_vst3!(Greybound);

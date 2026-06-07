@@ -1,4 +1,4 @@
-# Boutique59
+# Greybound
 
 Rust real-time graybox model of Nox30, a circuit-informed approximation of a JMI-era AC30/6 with the OS/010 Top Boost unit,
 implemented as a CLAP/VST3/standalone plugin with
@@ -46,7 +46,7 @@ cargo test
 cargo build --release
 ```
 
-The release build produces the plugin library and a `boutique59-cli` binary.
+The release build produces the plugin library and a `greybound-cli` binary.
 For convenient plugin bundles, install NIH-plug's `cargo xtask` bundler or add
 the standard NIH-plug `xtask` crate later.
 
@@ -58,13 +58,13 @@ processes one selected guitar input, and sends the result to selected outputs.
 List device names:
 
 ```sh
-target/release/boutique59-cli --list-devices
+target/release/greybound-cli --list-devices
 ```
 
 Then run with a name from the list. Channel numbers are one-based:
 
 ```sh
-target/release/boutique59-cli \
+target/release/greybound-cli \
   --rig rigs/nox30-driven.json5 \
   --device 'Scarlett 18i8 USB' \
   --input-channel 1 \
@@ -76,7 +76,7 @@ target/release/boutique59-cli \
 Run the release binary directly. Adjust the device name, sample rate, and period size for the interface:
 
 ```sh
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
   --input-channel 1 --output-channels 1,2 \
   --sample-rate 44100 --period-size 128
 ```
@@ -92,7 +92,7 @@ The speaker IR is optional and disabled by default. Enable the embedded,
 sample-rate-matched 200 ms Celestion Vintage 30 IR with:
 
 ```sh
-target/release/boutique59-cli --device 'Scarlett 18i8 USB' \
+target/release/greybound-cli --device 'Scarlett 18i8 USB' \
   --input-channel 1 --output-channels 1,2 \
   --sample-rate 44100 --period-size 128 --ir
 ```
@@ -107,7 +107,7 @@ convolution is skipped and only the matching dry delay runs.
 Rig files define amp and pedal controls. The standalone CLI requires `--rig`:
 
 ```sh
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 \
   --device 'Scarlett 18i8 USB' --input-channel 1 --output-channels 1,2 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 ```
@@ -132,40 +132,40 @@ input device.
 Generic standalone runs:
 
 ```sh
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
   --input-channel 1 --output-channels 1,2 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
   --device 'Scarlett 18i8 USB' --output-channels 1,2 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
-  --output-wav target/boutique59-nox30-monitor.wav --render-seconds 10 \
+  --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 File, null, and WAV monitor runs use the same binary:
 
 ```sh
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/nox30-driven.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
-  --output-wav target/boutique59-nox30-monitor.wav --render-seconds 10 \
+  --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 \
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
-  --output-wav target/boutique59-fuzz-monitor.wav --render-seconds 10 \
+  --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 
-target/release/boutique59-cli --rig rigs/minotaur-nox30.json5 \
+target/release/greybound-cli --rig rigs/minotaur-nox30.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
-  --output-wav target/boutique59-overdrive-monitor.wav --render-seconds 10 \
+  --output-wav target/greybound-overdrive-monitor.wav --render-seconds 10 \
   --sample-rate 44100 --period-size 16 --ir --monitor
 
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 \
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 \
   --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
   --device 'Scarlett 18i8 USB' --output-channels 1,2 \
   --sample-rate 44100 --period-size 16 --ir --monitor

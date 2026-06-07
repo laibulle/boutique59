@@ -52,7 +52,7 @@ export type CircuitDiagramGroup = {
 };
 
 export type CircuitDiagram = {
-  schema: "boutique59.circuit-diagram.v1";
+  schema: "greybound.circuit-diagram.v1";
   model: string;
   title: string;
   status: "documentation" | "draft" | "validated";

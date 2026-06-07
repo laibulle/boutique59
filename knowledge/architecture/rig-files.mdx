@@ -1,6 +1,6 @@
 ---
 title: Rig Files
-description: JSON5 files that describe only Boutique59 rig topology and controls.
+description: JSON5 files that describe only Greybound rig topology and controls.
 ---
 
 Rig files describe the musical rig, not the runtime session. They should not contain input devices, output devices, WAV paths, monitor settings, sample rate, or render duration.
@@ -8,7 +8,7 @@ Rig files describe the musical rig, not the runtime session. They should not con
 Runtime stays in CLI flags:
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 ## Format

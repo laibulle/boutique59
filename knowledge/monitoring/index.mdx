@@ -1,6 +1,6 @@
 ---
 title: Monitor Workflow
-description: How to generate logs and WAV output for repeatable Boutique59 analysis.
+description: How to generate logs and WAV output for repeatable Greybound analysis.
 ---
 
 The monitor workflow should produce a log and an audio artifact without requiring a real audio output device.
@@ -8,52 +8,52 @@ The monitor workflow should produce a log and an audio artifact without requirin
 ## Preferred Command
 
 ```bash
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
-This renders the standalone Nox30 path for a bounded duration, writes `boutique59-monitor.log`, and writes `target/boutique59-nox30-monitor.wav`.
+This renders the standalone Nox30 path for a bounded duration, writes `greybound-monitor.log`, and writes `target/greybound-nox30-monitor.wav`.
 
 For a shorter verification run:
 
 ```bash
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-nox30-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 ## Fuzz Render
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-fuzz-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
-This renders the Muffin into the Nox30 path, writes `boutique59-monitor.log`, and writes `target/boutique59-fuzz-monitor.wav`.
+This renders the Muffin into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-fuzz-monitor.wav`.
 
 For Muffin into the Nox30 model:
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 ## Overdrive Render
 
 ```bash
-target/release/boutique59-cli --rig rigs/minotaur-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
-This renders the Minotaur into the Nox30 path, writes `boutique59-monitor.log`, and writes `target/boutique59-overdrive-nox30-monitor.wav`.
+This renders the Minotaur into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-overdrive-nox30-monitor.wav`.
 
 ## Expected Artifacts
 
-- `boutique59-monitor.log`: text analysis stream used by the log-analysis agent.
-- `target/boutique59-nox30-monitor.wav`: mono WAV render at the engine sample rate.
-- `target/boutique59-fuzz-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
-- `target/boutique59-fuzz-nox30-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
-- `target/boutique59-overdrive-nox30-monitor.wav`: mono WAV render for the Minotaur Nox30 rig.
+- `greybound-monitor.log`: text analysis stream used by the log-analysis agent.
+- `target/greybound-nox30-monitor.wav`: mono WAV render at the engine sample rate.
+- `target/greybound-fuzz-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
+- `target/greybound-fuzz-nox30-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
+- `target/greybound-overdrive-nox30-monitor.wav`: mono WAV render for the Minotaur Nox30 rig.
 
 The WAV artifact is useful because it can be inspected later even when the test environment has no audio device.
 
 ## Interactive Monitor
 
-For live or device-output runs, `--monitor` opens a terminal monitor instead of appending a new line per refresh. The monitor keeps writing `boutique59-monitor.log` for analysis and also exposes live amp controls:
+For live or device-output runs, `--monitor` opens a terminal monitor instead of appending a new line per refresh. The monitor keeps writing `greybound-monitor.log` for analysis and also exposes live amp controls:
 
 - `Tab` / `Shift-Tab`: select volume, bass, treble, cut, drive, presence, or sag.
 - `Left` / `Right`: adjust the selected knob by 0.1 on the 0-10 scale.
@@ -66,11 +66,11 @@ The audio thread reads knob updates through atomics, so the terminal UI does not
 
 Recent monitor runs with the driven Nox30 configuration showed clean input and zero xruns, but severe output clipping at the selected output level. Treat clipping in this workflow as a model or gain-staging issue until analysis proves otherwise.
 
-A short `target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-fuzz-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor` run produced a valid mono 44.1 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
+A short `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor` run produced a valid mono 44.1 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
 
 ## Log Analysis Agent
 
-The `boutique59-log-analyst` agent should analyze `boutique59-monitor.log` and report:
+The `greybound-log-analyst` agent should analyze `greybound-monitor.log` and report:
 
 - clipping percentage and peak levels,
 - xruns or timing instability,

@@ -10,15 +10,15 @@ PERIOD_SIZE ?= 16
 INPUT_DB ?= 0
 OUTPUT_DB ?= -12
 TEST_INPUT_WAV ?= samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav
-TEST_OUTPUT_WAV ?= target/boutique59-nox30-monitor.wav
+TEST_OUTPUT_WAV ?= target/greybound-nox30-monitor.wav
 RENDER_SECONDS ?= 20
 RIG ?=
 INPUT ?= live
 OUTPUT ?= device
 IR ?= 0
 MONITOR ?= 0
-CLI := target/release/boutique59-cli
-DESKTOP :=target/release/boutique59-desktop
+CLI := target/release/greybound-cli
+DESKTOP :=target/release/greybound-desktop
 
 IR_FLAG = $(if $(filter 1 true yes on,$(IR)),--ir,)
 MONITOR_FLAG = $(if $(filter 1 true yes on,$(MONITOR)),--monitor,)
@@ -72,10 +72,10 @@ devices: build
 	$(CLI) --list-devices
 
 desktop:
-	cargo run -p boutique59-desktop
+	cargo run -p greybound-desktop
 
 desktop-release:
-	cargo run -p boutique59-desktop --release
+	cargo run -p greybound-desktop --release
 
 run-desktop: desktop-release
 	$(DESKTOP)

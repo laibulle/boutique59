@@ -19,7 +19,7 @@ set filetype=ascii
 op
 print v(grid) v(cath) v(bplus)
 tran 1u 100m 0 1u
-wrdata /tmp/boutique59_cathode_follower_12ax7.dat v(in) v(grid) v(cath) v(bplus)
+wrdata /tmp/greybound_cathode_follower_12ax7.dat v(in) v(grid) v(cath) v(bplus)
 quit
 .endc
 

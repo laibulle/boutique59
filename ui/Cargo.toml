@@ -1,9 +1,9 @@
 [package]
-name = "boutique59-ui"
+name = "greybound-ui"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Shared Boutique59 desktop UI layer for iced."
+description = "Shared Greybound desktop UI layer for iced."
 
 [dependencies]
 iced = { version = "0.10", features = ["canvas"] }

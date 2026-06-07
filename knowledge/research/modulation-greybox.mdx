@@ -9,7 +9,7 @@ Alistair Carson, Alec Wright, and Stefan Bilbao, ["Gradient-based Optimisation o
 
 ## Why It Matters
 
-This paper is directly relevant to Boutique59's modulation models because it targets the same live-guitar problem space:
+This paper is directly relevant to Greybound's modulation models because it targets the same live-guitar problem space:
 
 - phaser, flanger, and chorus effects,
 - analog reference units,
@@ -18,11 +18,11 @@ This paper is directly relevant to Boutique59's modulation models because it tar
 - time-domain inference with zero added latency,
 - low computational cost compared with heavier neural approaches.
 
-The strongest architectural point for Boutique59 is that the runtime model should remain explicit and controllable. Neural or gradient-based optimization should identify internal parameters, not replace the rig graph with an opaque network.
+The strongest architectural point for Greybound is that the runtime model should remain explicit and controllable. Neural or gradient-based optimization should identify internal parameters, not replace the rig graph with an opaque network.
 
 ## Implementation Takeaways
 
-For Boutique59, this suggests a staged path:
+For Greybound, this suggests a staged path:
 
 - Keep the existing device descriptors, rig format, bypass state, and runtime controls.
 - Promote modulation models to structured gray-box blocks whose parameters can be fitted.
@@ -69,4 +69,3 @@ Before replacing the current hand-tuned models, each fitted gray-box model shoul
 - What capture protocol should produce dry/wet training pairs for real pedals?
 - Do we fit one model per reference unit, or one conditional model across knob settings?
 - Should fitted coefficient files become part of the rig, the model descriptor, or a separate asset registry?
-

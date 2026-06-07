@@ -23,7 +23,7 @@ set filetype=ascii
 op
 print v(plate) v(cath) v(bplus)
 tran 1u 100m 0 1u
-wrdata /tmp/boutique59_common_cathode_12ax7.dat v(in) v(grid) v(plate) v(cath) v(bplus)
+wrdata /tmp/greybound_common_cathode_12ax7.dat v(in) v(grid) v(plate) v(cath) v(bplus)
 quit
 .endc
 

@@ -1,5 +1,5 @@
 {
-  schema: "boutique59.circuit-diagram.v1",
+  schema: "greybound.circuit-diagram.v1",
   model: "monarch",
   title: "Monarch dual-stage overdrive documentation graph",
   status: "documentation",

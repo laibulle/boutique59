@@ -1,5 +1,5 @@
-use boutique59::{AmpControls, Boutique59};
-use boutique59_ui::{Boutique59Ui, Message};
+use greybound::{AmpControls, Greybound};
+use greybound_ui::{GreyboundUi, Message};
 use iced::{Application, Command, Element, Settings, Subscription};
 
 fn main() -> iced::Result {
@@ -7,8 +7,8 @@ fn main() -> iced::Result {
 }
 
 struct Desktop {
-    ui: Boutique59Ui,
-    plugin: Boutique59,
+    ui: GreyboundUi,
+    plugin: Greybound,
 }
 
 impl Application for Desktop {
@@ -20,15 +20,15 @@ impl Application for Desktop {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         (
             Desktop {
-                ui: Boutique59Ui::default(),
-                plugin: Boutique59::default(),
+                ui: GreyboundUi::default(),
+                plugin: Greybound::default(),
             },
             Command::none(),
         )
     }
 
     fn title(&self) -> String {
-        String::from("Boutique59 Desktop")
+        String::from("Greybound Desktop")
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {

@@ -20,7 +20,7 @@ export async function generateMetadata(props: {
   if (!page) notFound();
 
   return {
-    title: `${page.data.title} | Boutique59`,
+    title: `${page.data.title} | Greybound`,
     description: page.data.description,
   };
 }

@@ -1,13 +1,4 @@
 use anyhow::{bail, Context, Result};
-use boutique59::amp::{AmpControls, Nox30OperatingPoint};
-use boutique59::ir::SpeakerStage;
-use boutique59::{
-    amp_model_descriptor, BrigadeControls, CelesteControls, ControlDescriptor, ControlKind,
-    DartfordControls, DartfordWave, DeviceConfig, DeviceControls, DeviceSlotConfig,
-    DeviceSlotControls, GodessOneControls, GodessOneMode, JetstreamControls, LumenControls,
-    MinotaurControls, MonarchControls, MuffinControls, MuonControls, RigConfig, SignalChain,
-    SignalChainConfig, SignalChainControls, SpringfieldControls, TronControls,
-};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, Device, SampleFormat, SampleRate, StreamConfig, SupportedStreamConfigRange,
@@ -17,6 +8,15 @@ use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEventKind},
     execute,
     terminal::{self, ClearType},
+};
+use greybound::amp::{AmpControls, Nox30OperatingPoint};
+use greybound::ir::SpeakerStage;
+use greybound::{
+    amp_model_descriptor, BrigadeControls, CelesteControls, ControlDescriptor, ControlKind,
+    DartfordControls, DartfordWave, DeviceConfig, DeviceControls, DeviceSlotConfig,
+    DeviceSlotControls, GodessOneControls, GodessOneMode, JetstreamControls, LumenControls,
+    MinotaurControls, MonarchControls, MuffinControls, MuonControls, RigConfig, SignalChain,
+    SignalChainConfig, SignalChainControls, SpringfieldControls, TronControls,
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -1174,7 +1174,7 @@ fn format_monitor_dashboard(
     let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
     let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
     let mut text = format!(
-        "🎸 Boutique59 monitor  model {model}  log {}\n\
+        "🎸 Greybound monitor  model {model}  log {}\n\
          🎚 input  rms {:>6} dBFS {} peak {:>6} dBFS near/clip {}/{}\n\
          🔊 output rms {:>6} dBFS {} peak {:>6} dBFS near/clip {}/{}\n\
          ⚡ xrun in/out {}/{}\n",
@@ -1933,7 +1933,7 @@ fn draw_monitor_frame(
     let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
     let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
     let title = format!(
-        " Boutique59 monitor  model {model}  log {} ",
+        " Greybound monitor  model {model}  log {} ",
         log_path.display()
     );
     frame.render_widget(
@@ -3130,7 +3130,7 @@ fn main() -> Result<()> {
         );
     }
     eprintln!(
-        "Boutique59 running: {} input channels, {} output channels, {} Hz, {} samples",
+        "Greybound running: {} input channels, {} output channels, {} Hz, {} samples",
         input_channels,
         output_stream
             .as_ref()
@@ -3305,7 +3305,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut output_db = -9.0;
     let mut ir = false;
     let mut monitor = false;
-    let mut monitor_log = PathBuf::from("boutique59-monitor.log");
+    let mut monitor_log = PathBuf::from("greybound-monitor.log");
     let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -3499,7 +3499,7 @@ fn print_devices(host: &cpal::Host) -> Result<()> {
 
 fn print_help() {
     eprintln!(
-        "Usage: boutique59-cli --rig PATH [OPTIONS]\n\
+        "Usage: greybound-cli --rig PATH [OPTIONS]\n\
          \n\
          Options:\n\
          \x20 --device NAME             Use the same input and output device\n\
@@ -3517,7 +3517,7 @@ fn print_help() {
          \x20 --input-db DB             Interface input calibration [default: 0]\n\
          \x20 --output-db DB            Safety output trim [default: -9]\n\
          \x20 --monitor                 Show interactive VU meters and amp controls\n\
-         \x20 --monitor-log PATH        Rotating monitor log [default: boutique59-monitor.log]\n\
+         \x20 --monitor-log PATH        Rotating monitor log [default: greybound-monitor.log]\n\
          \x20 --ir                      Force-enable the embedded 200 ms speaker IR, even if the rig has no active cab\n\
          \x20 --list-devices            List CoreAudio devices"
     );
@@ -3681,10 +3681,10 @@ mod tests {
                 transformer_flux_abs_max: 0.0012,
             }),
             "nox30",
-            Path::new("boutique59-monitor.log"),
+            Path::new("greybound-monitor.log"),
         );
 
-        assert!(dashboard.contains("🎸 Boutique59 monitor  model nox30"));
+        assert!(dashboard.contains("🎸 Greybound monitor  model nox30"));
         assert!(dashboard.contains("🎚 input  rms"));
         assert!(dashboard.contains("-6.0 dBFS ["));
         assert!(dashboard.contains("🔊 output rms"));
@@ -4121,10 +4121,8 @@ mod tests {
 
     #[test]
     fn rotating_monitor_log_keeps_latest_lines() {
-        let path = std::env::temp_dir().join(format!(
-            "boutique59-monitor-test-{}.log",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("greybound-monitor-test-{}.log", std::process::id()));
         let _ = std::fs::remove_file(&path);
 
         let mut log = RotatingMonitorLog::new(path.clone(), 3);

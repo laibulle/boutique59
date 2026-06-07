@@ -1,9 +1,9 @@
 ---
 title: IR Research Notes
-description: Research references for improving Boutique59 impulse-response rendering beyond static speaker convolution.
+description: Research references for improving Greybound impulse-response rendering beyond static speaker convolution.
 ---
 
-Boutique59 currently treats the speaker IR as an optional post-amp convolution stage. The runtime implementation is optimized for live playing rather than offline production: a mono embedded cabinet IR, direct FIR for the first partition, and partitioned FFT convolution for the tail.
+Greybound currently treats the speaker IR as an optional post-amp convolution stage. The runtime implementation is optimized for live playing rather than offline production: a mono embedded cabinet IR, direct FIR for the first partition, and partitioned FFT convolution for the tail.
 
 This page tracks research that may guide future IR work. These papers are not implementation requirements yet; they are references for evaluating better interpolation, reconstruction, and spatial rendering approaches.
 
@@ -34,7 +34,7 @@ Sparse measured IR interpolation:
 Physics-informed reconstruction:
 
 - Useful when a small number of measurements should reconstruct a larger sound field.
-- For Boutique59, this is more likely an offline authoring or dataset-building tool than a live audio thread feature.
+- For Greybound, this is more likely an offline authoring or dataset-building tool than a live audio thread feature.
 - The early part of the IR is the critical target because misaligned direct sound and early reflections produce obvious combing and spatial instability.
 
 Neural fields:
@@ -45,15 +45,15 @@ Neural fields:
 
 ## References
 
-- Zitong Lan, Chenhao Zheng, Zhiwei Zheng, and Mingmin Zhao, ["Acoustic Volume Rendering for Neural Impulse Response Fields"](https://proceedings.neurips.cc/paper_files/paper/2024/hash/4ebf0617b32da2cd083c3b17c7285cce-Abstract-Conference.html), NeurIPS 2024. Introduces Acoustic Volume Rendering, adapting volume rendering to impulse-response fields with frequency-domain rendering and spherical integration. Boutique59 relevance: a possible long-term direction for position-continuous IR fields, but likely offline or cached for now.
-- Xenofon Karakonstantis, Diego Caviedes-Nozal, Antoine Richard, and Efren Fernandez-Grande, ["Room impulse response reconstruction with physics-informed deep learning"](https://orbit.dtu.dk/en/publications/room-impulse-response-reconstruction-with-physics-informed-deep-l/), Journal of the Acoustical Society of America 155(2), 1048-1059, 2024, doi: [10.1121/10.0024750](https://doi.org/10.1121/10.0024750). Uses physics-informed neural networks with the wave equation and sparse measured RIRs. Boutique59 relevance: good candidate for offline reconstruction/validation of early room response fields.
-- Susan Liang, Chao Huang, Yapeng Tian, Anurag Kumar, and Chenliang Xu, ["Neural Acoustic Context Field: Rendering Realistic Room Impulse Response With Neural Fields"](https://arxiv.org/abs/2309.15977), arXiv:2309.15977, 2023. Uses geometry, material, and spatial context, plus temporal correlation and energy-decay criteria. Boutique59 relevance: useful design language for any future IR model that conditions on cabinet, room, mic, and listener context.
-- Amal Emthyas, Annika Neidhardt, Sebastià V. Amengual Garí, and Enzo De Sena, ["Spatial interpolation and extrapolation of binaural room impulse responses via system inversion"](https://openresearch.surrey.ac.uk/esploro/outputs/conferencePaper/Spatial-interpolation-and-extrapolation-of-binaural/99920766502346), AES International Conference on Audio for Virtual and Augmented Reality, 2024. Frames BRIR interpolation/extrapolation as an inverse problem using time-domain equivalent sources. Boutique59 relevance: a practical path for sparse BRIR datasets if headphone/spatial monitoring becomes a target.
-- Jiahong Zhao, Xiguang Zheng, Christian Ritz, and Daeyoung Jang, ["Interpolating the Directional Room Impulse Response for Dynamic Spatial Audio Reproduction"](https://www.mdpi.com/2076-3417/12/4/2061), Applied Sciences 12(4), 2061, 2022, doi: [10.3390/app12042061](https://doi.org/10.3390/app12042061). Decomposes first-order Ambisonic directional RIRs into direct, specular, and diffuse components for interpolation. Boutique59 relevance: supports a component-oriented IR representation where early reflections are parameterized separately from the late tail.
+- Zitong Lan, Chenhao Zheng, Zhiwei Zheng, and Mingmin Zhao, ["Acoustic Volume Rendering for Neural Impulse Response Fields"](https://proceedings.neurips.cc/paper_files/paper/2024/hash/4ebf0617b32da2cd083c3b17c7285cce-Abstract-Conference.html), NeurIPS 2024. Introduces Acoustic Volume Rendering, adapting volume rendering to impulse-response fields with frequency-domain rendering and spherical integration. Greybound relevance: a possible long-term direction for position-continuous IR fields, but likely offline or cached for now.
+- Xenofon Karakonstantis, Diego Caviedes-Nozal, Antoine Richard, and Efren Fernandez-Grande, ["Room impulse response reconstruction with physics-informed deep learning"](https://orbit.dtu.dk/en/publications/room-impulse-response-reconstruction-with-physics-informed-deep-l/), Journal of the Acoustical Society of America 155(2), 1048-1059, 2024, doi: [10.1121/10.0024750](https://doi.org/10.1121/10.0024750). Uses physics-informed neural networks with the wave equation and sparse measured RIRs. Greybound relevance: good candidate for offline reconstruction/validation of early room response fields.
+- Susan Liang, Chao Huang, Yapeng Tian, Anurag Kumar, and Chenliang Xu, ["Neural Acoustic Context Field: Rendering Realistic Room Impulse Response With Neural Fields"](https://arxiv.org/abs/2309.15977), arXiv:2309.15977, 2023. Uses geometry, material, and spatial context, plus temporal correlation and energy-decay criteria. Greybound relevance: useful design language for any future IR model that conditions on cabinet, room, mic, and listener context.
+- Amal Emthyas, Annika Neidhardt, Sebastià V. Amengual Garí, and Enzo De Sena, ["Spatial interpolation and extrapolation of binaural room impulse responses via system inversion"](https://openresearch.surrey.ac.uk/esploro/outputs/conferencePaper/Spatial-interpolation-and-extrapolation-of-binaural/99920766502346), AES International Conference on Audio for Virtual and Augmented Reality, 2024. Frames BRIR interpolation/extrapolation as an inverse problem using time-domain equivalent sources. Greybound relevance: a practical path for sparse BRIR datasets if headphone/spatial monitoring becomes a target.
+- Jiahong Zhao, Xiguang Zheng, Christian Ritz, and Daeyoung Jang, ["Interpolating the Directional Room Impulse Response for Dynamic Spatial Audio Reproduction"](https://www.mdpi.com/2076-3417/12/4/2061), Applied Sciences 12(4), 2061, 2022, doi: [10.3390/app12042061](https://doi.org/10.3390/app12042061). Decomposes first-order Ambisonic directional RIRs into direct, specular, and diffuse components for interpolation. Greybound relevance: supports a component-oriented IR representation where early reflections are parameterized separately from the late tail.
 
 ## Open Questions
 
-- Should Boutique59 model only cabinet/mic IRs, or also room/listener spatial IRs?
+- Should Greybound model only cabinet/mic IRs, or also room/listener spatial IRs?
 - Should the IR asset format store raw samples only, or should it also store decomposed early reflections and a late tail?
 - What validation fixtures should prove that interpolation does not create combing, unstable peaks, or level jumps?
 - Can offline learned/reconstructed IRs be compiled into the same partitioned-convolution format used by `SpeakerStage`?

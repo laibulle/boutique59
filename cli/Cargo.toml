@@ -1,11 +1,11 @@
 [package]
-name = "boutique59-cli"
+name = "greybound-cli"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
 [dependencies]
-boutique59 = { path = "../core" }
+greybound = { path = "../core" }
 anyhow = "1.0"
 cpal = "0.15"
 crossterm = "0.28"

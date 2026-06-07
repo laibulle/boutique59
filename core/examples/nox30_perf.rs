@@ -1,4 +1,4 @@
-use boutique59::amp::{AmpControls, VoxAmp};
+use greybound::amp::{AmpControls, VoxAmp};
 use std::time::Instant;
 
 fn main() {

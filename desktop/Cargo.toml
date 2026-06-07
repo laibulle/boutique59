@@ -1,11 +1,11 @@
 [package]
-name = "boutique59-desktop"
+name = "greybound-desktop"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Desktop frontend for Boutique59 using iced."
+description = "Desktop frontend for Greybound using iced."
 
 [dependencies]
 iced = { version = "0.10", features = ["canvas"] }
-boutique59-ui = { path = "../ui" }
-boutique59 = { path = "../core" }
+greybound-ui = { path = "../ui" }
+greybound = { path = "../core" }

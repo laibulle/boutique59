@@ -64,7 +64,7 @@ fn circuit_diagram_json5_files_are_valid_graphs() {
 
         assert_eq!(
             diagram.schema,
-            "boutique59.circuit-diagram.v1",
+            "greybound.circuit-diagram.v1",
             "{} uses an unsupported schema",
             path.display()
         );

@@ -1,5 +1,5 @@
 {
-  schema: "boutique59.circuit-diagram.v1",
+  schema: "greybound.circuit-diagram.v1",
   model: "dartford",
   title: "Dartford Vox/Jennings-inspired tremolo documentation graph",
   status: "documentation",

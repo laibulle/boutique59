@@ -1,5 +1,5 @@
 {
-  schema: "boutique59.circuit-diagram.v1",
+  schema: "greybound.circuit-diagram.v1",
   model: "nox30",
   title: "Nox30 amp documentation graph",
   status: "documentation",

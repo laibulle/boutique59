@@ -7,7 +7,7 @@ same circuit cells can later be reused by amps, pedals, and utility stages.
 
 `common_cathode_12ax7.cir` is a ngspice starting point for the ECC83/12AX7
 common-cathode stage implemented in `circuit::triode`. It writes transient data
-to `/tmp/boutique59_common_cathode_12ax7.dat`. Use it to compare:
+to `/tmp/greybound_common_cathode_12ax7.dat`. Use it to compare:
 
 - idle plate voltage, cathode voltage, and B+ sag
 - transient gain at 1 kHz with and without cathode bypass
@@ -31,7 +31,7 @@ Current 1 kHz transient reference with 20 mV sine input:
 - plate gain: 14.88x
 
 `cathode_follower_12ax7.cir` validates the follower cell. It writes transient
-data to `/tmp/boutique59_cathode_follower_12ax7.dat`.
+data to `/tmp/greybound_cathode_follower_12ax7.dat`.
 
 Current ngspice cathode-follower DC operating point:
 
@@ -47,7 +47,7 @@ Current 1 kHz transient reference with 20 mV sine input:
 - cathode gain: 0.834x
 
 `long_tail_pair_12ax7.cir` validates the shared-cathode phase-inverter cell. It
-writes transient data to `/tmp/boutique59_long_tail_pair_12ax7.dat`.
+writes transient data to `/tmp/greybound_long_tail_pair_12ax7.dat`.
 
 Current ngspice long-tail-pair DC operating point:
 

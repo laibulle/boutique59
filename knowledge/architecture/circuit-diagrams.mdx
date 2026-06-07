@@ -8,7 +8,7 @@ Circuit diagrams are documentation artifacts. They are not the runtime source of
 The diagram format is a JSON5 graph. It is intentionally richer than SPICE because each node can describe:
 
 - the circuit concept or physical part,
-- how it maps to Boutique59 circuit-library or DSP code,
+- how it maps to Greybound circuit-library or DSP code,
 - the renderer layout and visual grouping,
 - whether it has enough concrete electrical data for SPICE export.
 
@@ -27,7 +27,7 @@ Store diagrams beside the model documentation:
 
 ```json5
 {
-  schema: "boutique59.circuit-diagram.v1",
+  schema: "greybound.circuit-diagram.v1",
   model: "minotaur",
   title: "Minotaur overdrive",
   status: "documentation",

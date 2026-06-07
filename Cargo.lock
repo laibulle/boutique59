@@ -296,48 +296,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "boutique59"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hound",
- "json5",
- "nih_plug",
- "realfft",
- "rill-core-wdf",
- "serde",
-]
-
-[[package]]
-name = "boutique59-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "boutique59",
- "cpal",
- "crossterm",
- "hound",
- "ratatui",
- "rtrb",
-]
-
-[[package]]
-name = "boutique59-desktop"
-version = "0.1.0"
-dependencies = [
- "boutique59",
- "boutique59-ui",
- "iced",
-]
-
-[[package]]
-name = "boutique59-ui"
-version = "0.1.0"
-dependencies = [
- "iced",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1298,6 +1256,48 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bf0b36e6f090b7e1d8a4b49c0cb81c1f8376f72198c65dd3ad9ff3556b8b78c"
 dependencies = [
  "bitflags 2.12.1",
+]
+
+[[package]]
+name = "greybound"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hound",
+ "json5",
+ "nih_plug",
+ "realfft",
+ "rill-core-wdf",
+ "serde",
+]
+
+[[package]]
+name = "greybound-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "crossterm",
+ "greybound",
+ "hound",
+ "ratatui",
+ "rtrb",
+]
+
+[[package]]
+name = "greybound-desktop"
+version = "0.1.0"
+dependencies = [
+ "greybound",
+ "greybound-ui",
+ "iced",
+]
+
+[[package]]
+name = "greybound-ui"
+version = "0.1.0"
+dependencies = [
+ "iced",
 ]
 
 [[package]]

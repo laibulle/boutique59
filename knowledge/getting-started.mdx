@@ -1,13 +1,13 @@
 ---
 title: Getting Started
-description: Build Boutique59, run the standalone, choose rigs, and understand the main runtime concepts.
+description: Build Greybound, run the standalone, choose rigs, and understand the main runtime concepts.
 ---
 
-This page is the practical entry point for compiling Boutique59 and running a rig. The source of truth for authored docs is `knowledge/`; the `docs/` directory is only the Fumadocs/Next UI layer.
+This page is the practical entry point for compiling Greybound and running a rig. The source of truth for authored docs is `knowledge/`; the `docs/` directory is only the Fumadocs/Next UI layer.
 
 ## Prerequisites
 
-Boutique59 is a Rust workspace with a small Fumadocs site.
+Greybound is a Rust workspace with a small Fumadocs site.
 
 - Rust toolchain with `cargo`.
 - Node.js and npm for the docs site.
@@ -26,8 +26,8 @@ cargo build --release
 Useful focused checks:
 
 ```bash
-cargo test -p boutique59
-cargo test -p boutique59-cli
+cargo test -p greybound
+cargo test -p greybound-cli
 ```
 
 ## Docs
@@ -53,43 +53,43 @@ Rigs are JSON5 files in `rigs/`. They describe the musical rig only: amp, pedals
 Live guitar input to the configured output device:
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Dry WAV input to the configured output device:
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --device 'DEVICE NAME' --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --device 'DEVICE NAME' --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Dry WAV input rendered to a WAV file:
 
 ```bash
-target/release/boutique59-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Minotaur overdrive rendered to a WAV file:
 
 ```bash
-target/release/boutique59-cli --rig rigs/minotaur-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Godess One distortion rendered to a WAV file:
 
 ```bash
-target/release/boutique59-cli --rig rigs/godess-one-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-godess-one-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/godess-one-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-godess-one-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Dartford in the Nox30 FX loop rendered to a WAV file:
 
 ```bash
-target/release/boutique59-cli --rig rigs/dartford-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/boutique59-dartford-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/dartford-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-dartford-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Null output is useful when only the monitor log matters:
 
 ```bash
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --null-output --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --null-output --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 ## Runtime Parameters
@@ -97,7 +97,7 @@ target/release/boutique59-cli --rig rigs/nox30-driven.json5 --input-wav samples/
 Generic live run:
 
 ```bash
-target/release/boutique59-cli --rig rigs/nox30-driven.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor
 ```
 
 Main parameters:
@@ -114,7 +114,7 @@ Main parameters:
 - `--sample-rate HZ`: audio sample rate; use a rate supported by the device and input WAV.
 - `--period-size SAMPLES`: audio buffer size in samples.
 - `--ir`: enable the embedded speaker IR.
-- `--monitor`: enable the terminal monitor and `boutique59-monitor.log`.
+- `--monitor`: enable the terminal monitor and `greybound-monitor.log`.
 - `--input-db DB`: input calibration trim before the modeled rig.
 - `--output-db DB`: safety output trim after the modeled rig.
 
@@ -122,11 +122,11 @@ Rig files are the supported way to describe amp and pedal controls. Runtime flag
 
 ## CLI Parameters
 
-The release CLI is `target/release/boutique59-cli`.
+The release CLI is `target/release/greybound-cli`.
 
 ```bash
-target/release/boutique59-cli --help
-target/release/boutique59-cli --list-devices
+target/release/greybound-cli --help
+target/release/greybound-cli --list-devices
 ```
 
 Common CLI flags:
@@ -143,11 +143,11 @@ Common CLI flags:
 - `--output-db DB`: final output trim.
 - `--ir`: enable speaker IR.
 - `--monitor`: interactive terminal monitor.
-- `--monitor-log PATH`: monitor log path, default `boutique59-monitor.log`.
+- `--monitor-log PATH`: monitor log path, default `greybound-monitor.log`.
 
 ## Interactive Monitor
 
-With `--monitor`, live/device runs open a terminal monitor. It still writes `boutique59-monitor.log` for the log-analysis workflow.
+With `--monitor`, live/device runs open a terminal monitor. It still writes `greybound-monitor.log` for the log-analysis workflow.
 
 - `Tab` / `Shift-Tab`: select volume, bass, treble, cut, drive, presence, or sag.
 - `Left` / `Right`: adjust the selected knob by 0.1 on the 0-10 scale.
@@ -180,4 +180,4 @@ Pedals should be implemented as chain devices with private DSP state and explici
 
 Monitoring:
 
-Monitor output has two roles: immediate terminal feedback for a player/developer, and stable `boutique59-monitor.log` lines for analysis. Automated checks should prefer `target/release/boutique59-cli --input-wav ... --output-wav ... --render-seconds ...` because it exits by itself and produces both a log and a WAV artifact.
+Monitor output has two roles: immediate terminal feedback for a player/developer, and stable `greybound-monitor.log` lines for analysis. Automated checks should prefer `target/release/greybound-cli --input-wav ... --output-wav ... --render-seconds ...` because it exits by itself and produces both a log and a WAV artifact.

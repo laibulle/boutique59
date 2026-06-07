@@ -3,7 +3,7 @@ title: Virtual Analog Bibliography
 description: Source-safe notes for foundational virtual analog and neural-WDF papers.
 ---
 
-This page replaces the old local `doc/research/` PDF folder. Do not commit third-party PDFs unless their redistribution license is explicit and compatible with the project. Keep public links, citations, and Boutique59-specific engineering notes here instead.
+This page replaces the old local `doc/research/` PDF folder. Do not commit third-party PDFs unless their redistribution license is explicit and compatible with the project. Keep public links, citations, and Greybound-specific engineering notes here instead.
 
 ## Amp Modeling Review
 
@@ -17,7 +17,7 @@ What it covers:
 - white-box circuit equations,
 - nonlinear filters and Volterra-style approaches.
 
-Boutique59 interest:
+Greybound interest:
 
 - Still useful as the historical map of the problem.
 - Good reminder that amp modeling is not only static clipping: operating point, coupling, tone networks, power amp state, transformer, and speaker/load all matter.
@@ -40,7 +40,7 @@ What it covers:
 - port resistances and adaptor concepts,
 - stability-oriented discretization thinking.
 
-Boutique59 interest:
+Greybound interest:
 
 - Foundational if we promote more reusable circuit components to WDF form.
 - Especially relevant for passive tone networks, coupling networks, and future physically structured nonlinear blocks.
@@ -49,7 +49,7 @@ Boutique59 interest:
 Current status:
 
 - Foundational, not obsolete.
-- Too low-level and general to directly implement a Boutique59 amp by itself.
+- Too low-level and general to directly implement a Greybound amp by itself.
 - Should be paired with later arbitrary-topology and nonlinear-WDF papers before implementation.
 
 ## Arbitrary WDF Topologies
@@ -63,7 +63,7 @@ What it covers:
 - multiport linear elements such as transformers and controlled sources,
 - examples including Bassman tone stack and Tube Screamer tone/volume stages.
 
-Boutique59 interest:
+Greybound interest:
 
 - Very relevant for making circuit diagrams executable rather than only documentary.
 - A useful path for tone stacks, transformer-like linear networks, and pedal tone/volume networks that are not simple cascades.
@@ -86,7 +86,7 @@ What it covers:
 - real-time neural inference target,
 - reported low RMS error against measured amplifier output.
 
-Boutique59 interest:
+Greybound interest:
 
 - Useful as a historical black-box baseline and evidence that neural sequence models can emulate nonlinear amp behavior.
 - Good contrast against our preferred gray-box approach.
@@ -96,7 +96,7 @@ Current status:
 
 - Partly obsolete as a primary architecture choice.
 - LSTM-only models are less interpretable, harder to guarantee, and less aligned with our rig/circuit state design.
-- More recent SSM, DDSP, and neural gray-box work is a better fit for Boutique59.
+- More recent SSM, DDSP, and neural gray-box work is a better fit for Greybound.
 
 ## Neural WDF Nonlinearities
 
@@ -109,7 +109,7 @@ What it covers:
 - Lipschitz-bounded neural networks,
 - convergence conditions for fixed-point methods such as the Scattering Iterative Method.
 
-Boutique59 interest:
+Greybound interest:
 
 - Important if we later model coupled nonlinear devices inside one WDF network.
 - Relevant to diode networks, transistor cells, and future nonlinear WDF subcircuits.
@@ -117,7 +117,7 @@ Boutique59 interest:
 
 Current status:
 
-- Current and useful, but not immediately required by the present Boutique59 runtime.
+- Current and useful, but not immediately required by the present Greybound runtime.
 - The paper targets multiple one-port nonlinearities; tube stages and transformers may need multiport/vector treatment.
 - Use when we introduce nonlinear delay-free-loop solvers, not for every pedal or amp block.
 
@@ -134,7 +134,7 @@ What it covers:
 - zero-latency time-domain inference,
 - real analog reference units.
 
-Boutique59 interest:
+Greybound interest:
 
 - Directly relevant to `Tron`, `Jetstream`, and `Celeste`.
 - Supports our live target: fitted gray-box parameters with explicit, low-latency runtime structures.
@@ -144,5 +144,4 @@ Current status:
 
 - Very relevant and recent.
 - Should drive our next modulation-modeling plan.
-- See [Modulation Gray-Box Modeling](./modulation-greybox) for Boutique59-specific mapping.
-
+- See [Modulation Gray-Box Modeling](./modulation-greybox) for Greybound-specific mapping.

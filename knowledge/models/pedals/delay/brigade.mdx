@@ -3,7 +3,7 @@ title: Brigade
 description: Boss DM-2-inspired analog BBD delay engineering baseline.
 ---
 
-Brigade is Boutique59's first delay model. The reference target is the compact analog BBD delay family typified by the Boss DM-2: short-to-medium delay times, dark repeats, softened attack on each repeat, bounded feedback, and a wet/dry mix that sits behind the dry guitar.
+Brigade is Greybound's first delay model. The reference target is the compact analog BBD delay family typified by the Boss DM-2: short-to-medium delay times, dark repeats, softened attack on each repeat, bounded feedback, and a wet/dry mix that sits behind the dry guitar.
 
 The implementation does not copy a factory schematic. It is a graybox model that captures the useful engineering behavior: buffered high input impedance, input coupling, long fractional delay storage, BBD-like bandwidth limits before and after the delay, saturating feedback, dark repeat filtering, wet/dry mix, and low output impedance.
 
@@ -53,4 +53,4 @@ Useful next checks:
 ## References
 
 - The Boss DM-2 family is the primary musical reference: compact BBD delay with dark repeats and a simple repeat-rate/intensity/level control surface.
-- Public BBD delay schematics are used only as topology references. The source of truth for Boutique59 remains this model document plus the Rust implementation.
+- Public BBD delay schematics are used only as topology references. The source of truth for Greybound remains this model document plus the Rust implementation.

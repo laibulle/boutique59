@@ -137,16 +137,16 @@ impl DeviceState {
 }
 
 #[derive(Debug, Clone)]
-pub struct Boutique59Ui {
+pub struct GreyboundUi {
     pub devices: Vec<DeviceState>,
     pub selected_index: usize,
 }
 
-impl Default for Boutique59Ui {
+impl Default for GreyboundUi {
     fn default() -> Self {
         Self {
             devices: vec![
-                DeviceState::new_amp("Boutique59 Top Boost"),
+                DeviceState::new_amp("Greybound Top Boost"),
                 DeviceState::new_pedal("Crunch Pedal"),
                 DeviceState::new_pedal("Reverb Pedal"),
             ],
@@ -157,7 +157,7 @@ impl Default for Boutique59Ui {
 
 // Visual-only knobs and switches implemented with containers (non-canvas).
 
-impl Boutique59Ui {
+impl GreyboundUi {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SelectDevice(index) => {
@@ -473,7 +473,7 @@ impl Boutique59Ui {
         let header = container(
             row![
                 column![
-                    text("Boutique59").size(28),
+                    text("Greybound").size(28),
                     text("Amp + Pedalboard").size(14),
                 ]
                 .spacing(4)

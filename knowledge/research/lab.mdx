@@ -160,11 +160,17 @@ uv --project lab run greybound-lab sweep-rig-vs-reference \
   --output-db -12
 ```
 
-The first Nox30 grid sweep against `TopBoost-Gain5` found the lowest
-log-spectral distance around `volume = 0.760`, `drive = 0.800`, and
-`sag = 0.550`. Treat that as a coarse anchor, not as a final calibration: the
-null residual and envelope metrics still indicate dynamic mismatch that needs a
-broader sweep or targeted greybox work.
+The sweep report ranks points with a composite diagnostic score. The score keeps
+log-spectral distance important, but also penalizes weak null residual,
+envelope mismatch, and large gain correction. This is intentionally not an
+objective tone score: if a control feels musically reactive, keep that listening
+evidence. The score is only a guardrail against selecting a static NAM anchor
+from one metric.
+
+The first Nox30 grid sweep against `TopBoost-Gain5` stays near
+`volume = 0.760`, `drive = 0.800`, and `sag = 0.550`. Treat that as a coarse
+anchor, not as a final calibration: the null residual and envelope metrics still
+indicate dynamic mismatch that needs a broader sweep or targeted greybox work.
 
 ## Generate Stimuli
 

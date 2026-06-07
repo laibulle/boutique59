@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from itertools import product
 from pathlib import Path
 
@@ -19,6 +19,15 @@ class SweepPoint:
     output_wav: Path
     metadata_path: Path
     metrics: ComparisonMetrics
+
+
+@dataclass(frozen=True)
+class SweepScore:
+    total: float
+    spectral: float
+    null: float
+    envelope: float
+    gain: float
 
 
 def run_amp_control_sweep(
@@ -233,7 +242,7 @@ def write_sweep_report(
     points: list[SweepPoint],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    ranked = sorted(points, key=lambda point: point.metrics.log_spectral_distance_db)
+    ranked = sorted(points, key=lambda point: sweep_score(point.metrics).total)
     best = ranked[0]
     lines = [
         "# Rig Sweep vs NAM Reference",
@@ -249,6 +258,7 @@ def write_sweep_report(
         "## Best Point",
         "",
         f"- Values: `{format_values(best.values)}`",
+        f"- Composite match score: `{sweep_score(best.metrics).total:.3f}`",
         f"- Log-spectral distance: `{best.metrics.log_spectral_distance_db:.2f} dB`",
         f"- Null residual relative: `{best.metrics.null_relative_db:.2f} dB`",
         f"- Gain correction: `{best.metrics.gain_db:.2f} dB`",
@@ -256,28 +266,41 @@ def write_sweep_report(
         "",
         "## Top Candidates",
         "",
-        "| Rank | Values | Null rel dB | Log-spectral dB | Envelope dB |",
-        "| ---: | --- | ---: | ---: | ---: |",
+        "| Rank | Values | Score | Null rel dB | Log-spectral dB | Envelope dB |",
+        "| ---: | --- | ---: | ---: | ---: | ---: |",
     ]
     for rank, point in enumerate(ranked[: min(5, len(ranked))], start=1):
         metrics = point.metrics
+        score = sweep_score(metrics)
         lines.append(
-            f"| {rank} | {format_values(point.values)} | {metrics.null_relative_db:.2f} | "
+            f"| {rank} | {format_values(point.values)} | {score.total:.3f} | {metrics.null_relative_db:.2f} | "
             f"{metrics.log_spectral_distance_db:.2f} | {metrics.envelope_error_db:.2f} |"
         )
     lines.extend(
         [
             "",
+            "## Score Weights",
+            "",
+            "The composite score is a normalized diagnostic score where lower is better:",
+            "",
+            "- `45%` log-spectral distance, capped at `20 dB`.",
+            "- `30%` null residual, where `-12 dB` or lower is considered good for this coarse anchor.",
+            "- `20%` envelope error, where `-12 dB` or lower is considered good.",
+            "- `5%` absolute gain correction, capped at `6 dB`.",
+            "",
+            "It is intentionally not an objective tone score. It prevents a purely spectral match from hiding weak dynamics, while preserving all raw metrics for listening-led decisions.",
+            "",
         "## Sweep Table",
         "",
-        "| Values | Gain corr dB | Null rel dB | Log-spectral dB | Envelope dB | Candidate RMS | Candidate peak | WAV |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Values | Score | Gain corr dB | Null rel dB | Log-spectral dB | Envelope dB | Candidate RMS | Candidate peak | WAV |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for point in points:
         metrics = point.metrics
+        score = sweep_score(metrics)
         lines.append(
-            f"| {format_values(point.values)} | {metrics.gain_db:.2f} | {metrics.null_relative_db:.2f} | "
+            f"| {format_values(point.values)} | {score.total:.3f} | {metrics.gain_db:.2f} | {metrics.null_relative_db:.2f} | "
             f"{metrics.log_spectral_distance_db:.2f} | {metrics.envelope_error_db:.2f} | "
             f"{metrics.candidate.rms_dbfs:.2f} | {metrics.candidate.peak_dbfs:.2f} | `{point.output_wav}` |"
         )
@@ -286,8 +309,8 @@ def write_sweep_report(
             "",
             "## Interpretation",
             "",
-            "This report ranks by log-spectral distance first because this sweep is meant to find a coarse amp-control anchor.",
-            "Use the null residual, envelope error, and segment diagnostics before deciding that one point is musically superior.",
+            "This report ranks by the composite score because this sweep is meant to find a coarse amp-control anchor without ignoring dynamics.",
+            "Use the raw metrics and rendered WAVs before deciding that one point is musically superior; a responsive gain law can be musically right even when a fixed NAM snapshot prefers a nearby static setting.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -339,6 +362,8 @@ def write_sweep_metadata(
                 "output_wav": str(point.output_wav),
                 "metadata": str(point.metadata_path),
                 "gain_db": point.metrics.gain_db,
+                "match_score": sweep_score(point.metrics).total,
+                "score_components": asdict(sweep_score(point.metrics)),
                 "null_relative_db": point.metrics.null_relative_db,
                 "log_spectral_distance_db": point.metrics.log_spectral_distance_db,
                 "envelope_error_db": point.metrics.envelope_error_db,
@@ -353,3 +378,16 @@ def write_sweep_metadata(
 
 def format_values(values: dict[str, float]) -> str:
     return ", ".join(f"{control}={value:.3f}" for control, value in values.items())
+
+
+def sweep_score(metrics: ComparisonMetrics) -> SweepScore:
+    spectral = clamp01(metrics.log_spectral_distance_db / 20.0)
+    null = clamp01((metrics.null_relative_db + 12.0) / 12.0)
+    envelope = clamp01((metrics.envelope_error_db + 12.0) / 12.0)
+    gain = clamp01(abs(metrics.gain_db) / 6.0)
+    total = 0.45 * spectral + 0.30 * null + 0.20 * envelope + 0.05 * gain
+    return SweepScore(total=total, spectral=spectral, null=null, envelope=envelope, gain=gain)
+
+
+def clamp01(value: float) -> float:
+    return min(1.0, max(0.0, value))

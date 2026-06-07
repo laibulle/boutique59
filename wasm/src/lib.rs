@@ -24,7 +24,7 @@ pub struct GreyboundNox30 {
 impl GreyboundNox30 {
     #[wasm_bindgen(constructor)]
     pub fn new(sample_rate: f32) -> Self {
-        configure_first_stage_model(FirstStageModel::Analytic);
+        configure_first_stage_model(FirstStageModel::Graybox);
         let chain_config = SignalChainConfig::amp_only("nox30");
         Self {
             chain: SignalChain::new(sample_rate, chain_config.clone()),
@@ -35,7 +35,7 @@ impl GreyboundNox30 {
             sample_rate: sample_rate as u32,
             speaker: SpeakerStage::bypassed(),
             speaker_enabled: false,
-            first_stage_model: FirstStageModel::Analytic,
+            first_stage_model: FirstStageModel::Graybox,
         }
     }
 
@@ -53,7 +53,7 @@ impl GreyboundNox30 {
         let device_controls = rig
             .device_controls()
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
-        configure_first_stage_model(FirstStageModel::Analytic);
+        configure_first_stage_model(FirstStageModel::Graybox);
         Ok(Self {
             chain: SignalChain::new(sample_rate, chain_config.clone()),
             chain_config,
@@ -63,7 +63,7 @@ impl GreyboundNox30 {
             sample_rate: sample_rate as u32,
             speaker: SpeakerStage::bypassed(),
             speaker_enabled: false,
-            first_stage_model: FirstStageModel::Analytic,
+            first_stage_model: FirstStageModel::Graybox,
         })
     }
 

@@ -376,6 +376,15 @@ fn first_stage_neural(sample_rate: f32) -> Option<FirstStageNeural> {
             {
                 return first_stage_graybox(sample_rate, config);
             }
+            if env::var_os("GREYBOUND_NOX30_DISABLE_DEFAULT_GRAYBOX").is_none() {
+                return first_stage_graybox(
+                    sample_rate,
+                    FirstStageGrayboxConfig {
+                        config_path: PathBuf::from("accepted-live"),
+                        mode: NeuralCellMode::Replace,
+                    },
+                );
+            }
             env_first_stage_neural(
                 "GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR",
                 NeuralCellMode::Shadow,

@@ -328,11 +328,12 @@ first stage.
 
 Integration readiness: the validated `v0` parameters are now available as the
 built-in gray-box config id `accepted`, so CLI/lab/web builds do not depend on a
-local ignored model file. CLI usage is
-`--graybox-cell nox30.first_stage=accepted`; the web WASM monitor exposes the
-same candidate through its `First stage` selector. This makes the candidate
-demoable and releasable as an explicit option while preserving the analytic
-first stage as the default.
+local ignored model file. The live-integrated variant is `accepted-live`, which
+uses the same cell parameters plus a Nox30 integration trim chosen from live
+guitar testing. Nox30 now defaults to `accepted-live`; CLI can force it with
+`--graybox-cell nox30.first_stage=accepted-live`, and can return to the analytic
+path with `--disable-neural-cell`. The web WASM monitor exposes the same choice
+through its `First stage` selector and defaults to `graybox`.
 
 Milestone 5: export and Rust equivalence
 

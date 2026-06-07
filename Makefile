@@ -63,6 +63,7 @@ NEURAL_BLEND_ALPHAS ?= 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1
 GRAYBOX_CELL ?= common-cathode-12ax7-state
 GRAYBOX_OUTPUT_DIR ?= lab/models/common-cathode-12ax7-graybox-state-current
 GRAYBOX_CONFIG ?= accepted
+INTEGRATED_GRAYBOX_CONFIG ?= accepted-live
 GRAYBOX_LOCAL_CONFIG ?= $(GRAYBOX_OUTPUT_DIR)/common-cathode-graybox-state.json
 GRAYBOX_EVAL_REPORT ?= $(GRAYBOX_OUTPUT_DIR)/rust-evaluation.md
 GRAYBOX_EPOCHS ?= 220
@@ -256,7 +257,7 @@ lab-evaluate-integrated-neural-cell: build
 
 lab-evaluate-integrated-graybox-cell: build
 	uv --project lab run greybound-lab evaluate-integrated-neural-cell \
-		--graybox-config "$(GRAYBOX_CONFIG)" \
+		--graybox-config "$(INTEGRATED_GRAYBOX_CONFIG)" \
 		--component "nox30.first_stage" \
 		--rig "$(INTEGRATED_NEURAL_RIG)" \
 		--input-wav "$(TEST_INPUT_WAV)" \

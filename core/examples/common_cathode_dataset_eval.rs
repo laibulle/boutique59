@@ -23,6 +23,9 @@ struct Stimulus {
 #[derive(Debug, Deserialize)]
 struct StimulusParameters {
     settle_time_s: Option<f32>,
+    frequency_hz: Option<f64>,
+    first_hz: Option<f64>,
+    second_hz: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +60,31 @@ struct Row {
     aligned_rmse_v: f64,
     aligned_relative_rmse: f64,
     zero_baseline_rmse_v: f64,
+    harmonic_shape: Option<HarmonicShape>,
+    imd_shape: Option<ImdShape>,
+}
+
+struct HarmonicShape {
+    fundamental_hz: f64,
+    candidate_thd_db: f64,
+    reference_thd_db: f64,
+    thd_delta_db: f64,
+    h2_delta_db: Option<f64>,
+    h3_delta_db: Option<f64>,
+    h4_delta_db: Option<f64>,
+    h5_delta_db: Option<f64>,
+}
+
+struct ImdShape {
+    first_hz: f64,
+    second_hz: f64,
+    candidate_imd_db: f64,
+    reference_imd_db: f64,
+    imd_delta_db: f64,
+    difference_delta_db: Option<f64>,
+    sum_delta_db: Option<f64>,
+    lower_sideband_delta_db: Option<f64>,
+    upper_sideband_delta_db: Option<f64>,
 }
 
 fn main() -> Result<()> {
@@ -196,6 +224,29 @@ fn evaluate_stimulus(
         manifest.sample_rate_hz,
         stride,
     )?;
+    let candidate_f64: Vec<f64> = candidate.iter().map(|value| *value as f64).collect();
+    let effective_sample_rate = manifest.sample_rate_hz as f64 / stride as f64;
+    let harmonic_shape = stimulus
+        .parameters
+        .as_ref()
+        .and_then(|parameters| parameters.frequency_hz)
+        .map(|frequency_hz| {
+            harmonic_shape(
+                &candidate_f64,
+                &reference_f64,
+                effective_sample_rate,
+                frequency_hz,
+            )
+        });
+    let imd_shape = stimulus.parameters.as_ref().and_then(|parameters| {
+        Some(imd_shape(
+            &candidate_f64,
+            &reference_f64,
+            effective_sample_rate,
+            parameters.first_hz?,
+            parameters.second_hz?,
+        ))
+    });
     Ok(Row {
         stimulus_id: stimulus.id.clone(),
         split: split.to_string(),
@@ -214,6 +265,8 @@ fn evaluate_stimulus(
         aligned_rmse_v: alignment.rmse_v,
         aligned_relative_rmse: alignment.rmse_v / alignment.reference_rms_v.max(1.0e-12),
         zero_baseline_rmse_v: reference_rms,
+        harmonic_shape,
+        imd_shape,
     })
 }
 
@@ -280,6 +333,8 @@ fn write_report(
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let harmonic_table = harmonic_shape_table(rows);
+    let imd_table = imd_shape_table(rows);
     fs::write(
         path,
         format!(
@@ -320,6 +375,26 @@ stimulus before comparison with SPICE `plate_ac_v`.
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 {}
 
+## Harmonic Shape
+
+This section compares level-normalized harmonic structure on sine stimuli.
+Positive deltas mean the Rust analytic cell produces more of that distortion
+component than SPICE.
+
+| Stimulus | Split | F0 Hz | Candidate THD dB | SPICE THD dB | THD delta dB | H2 delta dB | H3 delta dB | H4 delta dB | H5 delta dB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+{}
+
+## IMD Shape
+
+This section compares level-normalized intermodulation products on two-tone
+stimuli. Positive deltas mean the Rust analytic cell produces more of that
+product than SPICE.
+
+| Stimulus | Split | F1 Hz | F2 Hz | Candidate IMD dB | SPICE IMD dB | IMD delta dB | Difference dB | Sum dB | Lower sideband dB | Upper sideband dB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+{}
+
 ## Interpretation
 
 This report is the first reference point for deciding whether a neural cell is
@@ -335,6 +410,11 @@ or discretization.
 This alignment is diagnostic, not a physical latency measurement. Periodic
 stimuli can produce phase-equivalent lags and negative gains, especially around
 single-frequency sine tests.
+
+The harmonic and IMD sections are level-normalized shape checks. If they are
+close while the time-domain residual remains high, the next investigation should
+focus on dynamic state, phase, operating-point movement, or fixture equivalence
+instead of only refitting a static transfer curve.
 "#,
             manifest_path.display(),
             split,
@@ -347,7 +427,9 @@ single-frequency sine tests.
             aggregate.aligned_rmse_v * 1000.0,
             aggregate.aligned_relative_rmse * 100.0,
             aggregate.zero_baseline_rmse_v * 1000.0,
-            table
+            table,
+            harmonic_table,
+            imd_table
         ),
     )?;
     Ok(())
@@ -361,6 +443,61 @@ struct Aggregate {
     aligned_rmse_v: f64,
     aligned_relative_rmse: f64,
     zero_baseline_rmse_v: f64,
+}
+
+fn harmonic_shape_table(rows: &[Row]) -> String {
+    let lines = rows
+        .iter()
+        .filter_map(|row| {
+            let shape = row.harmonic_shape.as_ref()?;
+            Some(format!(
+                "| `{}` | `{}` | {:.1} | {:.2} | {:.2} | {:.2} | {} | {} | {} | {} |",
+                row.stimulus_id,
+                row.split,
+                shape.fundamental_hz,
+                shape.candidate_thd_db,
+                shape.reference_thd_db,
+                shape.thd_delta_db,
+                optional_db(shape.h2_delta_db),
+                optional_db(shape.h3_delta_db),
+                optional_db(shape.h4_delta_db),
+                optional_db(shape.h5_delta_db)
+            ))
+        })
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        "| _none_ |  |  |  |  |  |  |  |  |  |".to_string()
+    } else {
+        lines.join("\n")
+    }
+}
+
+fn imd_shape_table(rows: &[Row]) -> String {
+    let lines = rows
+        .iter()
+        .filter_map(|row| {
+            let shape = row.imd_shape.as_ref()?;
+            Some(format!(
+                "| `{}` | `{}` | {:.1} | {:.1} | {:.2} | {:.2} | {:.2} | {} | {} | {} | {} |",
+                row.stimulus_id,
+                row.split,
+                shape.first_hz,
+                shape.second_hz,
+                shape.candidate_imd_db,
+                shape.reference_imd_db,
+                shape.imd_delta_db,
+                optional_db(shape.difference_delta_db),
+                optional_db(shape.sum_delta_db),
+                optional_db(shape.lower_sideband_delta_db),
+                optional_db(shape.upper_sideband_delta_db)
+            ))
+        })
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        "| _none_ |  |  |  |  |  |  |  |  |  |  |".to_string()
+    } else {
+        lines.join("\n")
+    }
 }
 
 fn aggregate(rows: &[Row]) -> Aggregate {
@@ -512,4 +649,262 @@ fn optimal_gain(candidate: &[f64], reference: &[f64]) -> f64 {
 
 fn linear_to_db(value: f64) -> f64 {
     20.0 * value.max(1.0e-12).log10()
+}
+
+fn optional_db(value: Option<f64>) -> String {
+    value
+        .map(|value| format!("{value:.2}"))
+        .unwrap_or_else(|| "n/a".to_string())
+}
+
+fn harmonic_shape(
+    candidate: &[f64],
+    reference: &[f64],
+    sample_rate_hz: f64,
+    fundamental_hz: f64,
+) -> HarmonicShape {
+    let candidate_lines = harmonic_levels(candidate, sample_rate_hz, fundamental_hz);
+    let reference_lines = harmonic_levels(reference, sample_rate_hz, fundamental_hz);
+    let candidate_thd_db = thd_db(&candidate_lines);
+    let reference_thd_db = thd_db(&reference_lines);
+    HarmonicShape {
+        fundamental_hz,
+        candidate_thd_db,
+        reference_thd_db,
+        thd_delta_db: candidate_thd_db - reference_thd_db,
+        h2_delta_db: harmonic_delta_db(&candidate_lines, &reference_lines, 2),
+        h3_delta_db: harmonic_delta_db(&candidate_lines, &reference_lines, 3),
+        h4_delta_db: harmonic_delta_db(&candidate_lines, &reference_lines, 4),
+        h5_delta_db: harmonic_delta_db(&candidate_lines, &reference_lines, 5),
+    }
+}
+
+fn imd_shape(
+    candidate: &[f64],
+    reference: &[f64],
+    sample_rate_hz: f64,
+    first_hz: f64,
+    second_hz: f64,
+) -> ImdShape {
+    let low_hz = first_hz.min(second_hz);
+    let high_hz = first_hz.max(second_hz);
+    let first_hz = low_hz;
+    let second_hz = high_hz;
+    let frequencies = imd_frequencies(first_hz, second_hz);
+    let candidate_lines = line_levels(candidate, sample_rate_hz, &frequencies);
+    let reference_lines = line_levels(reference, sample_rate_hz, &frequencies);
+    let candidate_imd_db = imd_ratio_db(&candidate_lines, first_hz, second_hz);
+    let reference_imd_db = imd_ratio_db(&reference_lines, first_hz, second_hz);
+    ImdShape {
+        first_hz,
+        second_hz,
+        candidate_imd_db,
+        reference_imd_db,
+        imd_delta_db: candidate_imd_db - reference_imd_db,
+        difference_delta_db: line_ratio_delta_db(
+            &candidate_lines,
+            &reference_lines,
+            (second_hz - first_hz).abs(),
+            first_hz,
+            second_hz,
+        ),
+        sum_delta_db: line_ratio_delta_db(
+            &candidate_lines,
+            &reference_lines,
+            first_hz + second_hz,
+            first_hz,
+            second_hz,
+        ),
+        lower_sideband_delta_db: line_ratio_delta_db(
+            &candidate_lines,
+            &reference_lines,
+            2.0 * first_hz - second_hz,
+            first_hz,
+            second_hz,
+        ),
+        upper_sideband_delta_db: line_ratio_delta_db(
+            &candidate_lines,
+            &reference_lines,
+            2.0 * second_hz - first_hz,
+            first_hz,
+            second_hz,
+        ),
+    }
+}
+
+fn harmonic_levels(samples: &[f64], sample_rate_hz: f64, fundamental_hz: f64) -> [Option<f64>; 6] {
+    let mut levels = [None; 6];
+    for harmonic in 1..=5 {
+        let frequency_hz = fundamental_hz * harmonic as f64;
+        if frequency_hz < sample_rate_hz / 2.0 {
+            levels[harmonic] = Some(line_level(samples, sample_rate_hz, frequency_hz));
+        }
+    }
+    levels
+}
+
+fn line_levels(samples: &[f64], sample_rate_hz: f64, frequencies_hz: &[f64]) -> Vec<(f64, f64)> {
+    frequencies_hz
+        .iter()
+        .copied()
+        .filter(|frequency_hz| *frequency_hz > 0.0 && *frequency_hz < sample_rate_hz / 2.0)
+        .map(|frequency_hz| {
+            (
+                frequency_hz,
+                line_level(samples, sample_rate_hz, frequency_hz),
+            )
+        })
+        .collect()
+}
+
+fn line_level(samples: &[f64], sample_rate_hz: f64, frequency_hz: f64) -> f64 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let mut real = 0.0;
+    let mut imaginary = 0.0;
+    let samples_len = samples.len() as f64;
+    for (index, sample) in samples.iter().enumerate() {
+        let window = hann(index, samples.len());
+        let phase = 2.0 * std::f64::consts::PI * frequency_hz * index as f64 / sample_rate_hz;
+        real += sample * window * phase.cos();
+        imaginary -= sample * window * phase.sin();
+    }
+    2.0 * (real * real + imaginary * imaginary).sqrt() / samples_len.max(1.0)
+}
+
+fn hann(index: usize, len: usize) -> f64 {
+    if len <= 1 {
+        return 1.0;
+    }
+    0.5 - 0.5 * (2.0 * std::f64::consts::PI * index as f64 / len as f64).cos()
+}
+
+fn thd_db(levels: &[Option<f64>; 6]) -> f64 {
+    let fundamental = levels[1].unwrap_or(0.0);
+    let harmonic_power = levels
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index > 1)
+        .filter_map(|(_, level)| level.map(|level| level * level))
+        .sum::<f64>();
+    linear_to_db(harmonic_power.sqrt() / fundamental.max(1.0e-12))
+}
+
+fn harmonic_delta_db(
+    candidate: &[Option<f64>; 6],
+    reference: &[Option<f64>; 6],
+    harmonic: usize,
+) -> Option<f64> {
+    let candidate_ratio = candidate[harmonic]? / candidate[1].unwrap_or(0.0).max(1.0e-12);
+    let reference_ratio = reference[harmonic]? / reference[1].unwrap_or(0.0).max(1.0e-12);
+    Some(linear_to_db(candidate_ratio / reference_ratio.max(1.0e-12)))
+}
+
+fn imd_frequencies(first_hz: f64, second_hz: f64) -> [f64; 6] {
+    [
+        first_hz,
+        second_hz,
+        (second_hz - first_hz).abs(),
+        first_hz + second_hz,
+        2.0 * first_hz - second_hz,
+        2.0 * second_hz - first_hz,
+    ]
+}
+
+fn imd_ratio_db(levels: &[(f64, f64)], first_hz: f64, second_hz: f64) -> f64 {
+    let fundamental_power =
+        line_from_levels(levels, first_hz).powi(2) + line_from_levels(levels, second_hz).powi(2);
+    let product_power = imd_frequencies(first_hz, second_hz)
+        .iter()
+        .copied()
+        .filter(|frequency_hz| *frequency_hz != first_hz && *frequency_hz != second_hz)
+        .map(|frequency_hz| line_from_levels(levels, frequency_hz).powi(2))
+        .sum::<f64>();
+    linear_to_db(product_power.sqrt() / fundamental_power.sqrt().max(1.0e-12))
+}
+
+fn line_ratio_delta_db(
+    candidate: &[(f64, f64)],
+    reference: &[(f64, f64)],
+    frequency_hz: f64,
+    first_hz: f64,
+    second_hz: f64,
+) -> Option<f64> {
+    if frequency_hz <= 0.0 {
+        return None;
+    }
+    let candidate_line = line_from_levels(candidate, frequency_hz);
+    let reference_line = line_from_levels(reference, frequency_hz);
+    let candidate_fundamental = (line_from_levels(candidate, first_hz).powi(2)
+        + line_from_levels(candidate, second_hz).powi(2))
+    .sqrt();
+    let reference_fundamental = (line_from_levels(reference, first_hz).powi(2)
+        + line_from_levels(reference, second_hz).powi(2))
+    .sqrt();
+    let candidate_ratio = candidate_line / candidate_fundamental.max(1.0e-12);
+    let reference_ratio = reference_line / reference_fundamental.max(1.0e-12);
+    Some(linear_to_db(candidate_ratio / reference_ratio.max(1.0e-12)))
+}
+
+fn line_from_levels(levels: &[(f64, f64)], frequency_hz: f64) -> f64 {
+    levels
+        .iter()
+        .find(|(line_frequency_hz, _)| (*line_frequency_hz - frequency_hz).abs() < 1.0e-6)
+        .map(|(_, level)| *level)
+        .unwrap_or(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn harmonic_shape_tracks_thd_delta() {
+        let sample_rate_hz = 48_000.0;
+        let candidate = sine_with_harmonic(sample_rate_hz, 1_000.0, 0.25);
+        let reference = sine_with_harmonic(sample_rate_hz, 1_000.0, 0.05);
+        let shape = harmonic_shape(&candidate, &reference, sample_rate_hz, 1_000.0);
+
+        assert!(shape.thd_delta_db > 10.0);
+        assert!(shape.h2_delta_db.unwrap() > 10.0);
+    }
+
+    #[test]
+    fn imd_shape_tracks_product_delta() {
+        let sample_rate_hz = 48_000.0;
+        let candidate = two_tone_with_difference(sample_rate_hz, 997.0, 1499.0, 0.20);
+        let reference = two_tone_with_difference(sample_rate_hz, 997.0, 1499.0, 0.02);
+        let shape = imd_shape(&candidate, &reference, sample_rate_hz, 997.0, 1499.0);
+
+        assert!(shape.imd_delta_db > 10.0);
+        assert!(shape.difference_delta_db.unwrap() > 10.0);
+    }
+
+    fn sine_with_harmonic(sample_rate_hz: f64, fundamental_hz: f64, h2_gain: f64) -> Vec<f64> {
+        (0..48_000)
+            .map(|index| {
+                let time_s = index as f64 / sample_rate_hz;
+                (2.0 * std::f64::consts::PI * fundamental_hz * time_s).sin()
+                    + h2_gain * (4.0 * std::f64::consts::PI * fundamental_hz * time_s).sin()
+            })
+            .collect()
+    }
+
+    fn two_tone_with_difference(
+        sample_rate_hz: f64,
+        first_hz: f64,
+        second_hz: f64,
+        difference_gain: f64,
+    ) -> Vec<f64> {
+        (0..48_000)
+            .map(|index| {
+                let time_s = index as f64 / sample_rate_hz;
+                (2.0 * std::f64::consts::PI * first_hz * time_s).sin()
+                    + (2.0 * std::f64::consts::PI * second_hz * time_s).sin()
+                    + difference_gain
+                        * (2.0 * std::f64::consts::PI * (second_hz - first_hz) * time_s).sin()
+            })
+            .collect()
+    }
 }

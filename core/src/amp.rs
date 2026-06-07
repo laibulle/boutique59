@@ -30,6 +30,8 @@ pub struct Nox30OperatingPoint {
     pub follower_cathode_voltage: f32,
     pub drive_stage_plate_current: f32,
     pub recovery_stage_plate_current: f32,
+    pub first_stage_shadow_output_v: Option<f32>,
+    pub first_stage_shadow_error_v: Option<f32>,
     pub phase_inverter_plate_a_current: f32,
     pub phase_inverter_plate_b_current: f32,
     pub phase_inverter_cathode_voltage: f32,
@@ -389,8 +391,8 @@ mod tests {
 
     #[test]
     fn standalone_nox30_file_rig_stays_in_output_range() {
-        let mut amp = VoxAmp::with_model(44_100.0, "nox30");
-        let mut speaker = SpeakerStage::from_embedded_ir(44_100).unwrap();
+        let mut amp = VoxAmp::with_model(48_000.0, "nox30");
+        let mut speaker = SpeakerStage::from_embedded_ir(48_000).unwrap();
         let controls = AmpControls {
             volume: 0.76,
             bass: 0.52,
@@ -528,7 +530,7 @@ mod tests {
         let mut checksum = 0.0_f64;
         let mut count = 0;
 
-        for (sample_idx, input) in samples.into_iter().cycle().take(44_100 * 4).enumerate() {
+        for (sample_idx, input) in samples.into_iter().cycle().take(48_000 * 4).enumerate() {
             let output = speaker.process(amp.process(input, controls), true);
             assert!(output.is_finite());
             peak = peak.max(output.abs());
@@ -540,7 +542,7 @@ mod tests {
         let rms = (sum / count as f32).sqrt();
         let normalized_checksum = checksum / count as f64;
         assert!(
-            (0.020..0.140).contains(&rms),
+            (0.005..0.080).contains(&rms),
             "rms={rms}, peak={peak}, checksum={normalized_checksum}"
         );
         assert!(
@@ -846,10 +848,10 @@ mod tests {
 
     fn load_test_guitar_wav() -> Vec<f32> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav");
+            .join("../lab/references/tone3000-inputs/Brit - Guitar.wav");
         let mut reader = hound::WavReader::open(path).unwrap();
         let spec = reader.spec();
-        assert_eq!(spec.sample_rate, 44_100);
+        assert_eq!(spec.sample_rate, 48_000);
         let channels = spec.channels as usize;
         assert!(channels >= 1);
 

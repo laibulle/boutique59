@@ -8,7 +8,7 @@ The monitor workflow should produce a log and an audio artifact without requirin
 ## Preferred Command
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir --monitor
 ```
 
 This renders the standalone Nox30 path for a bounded duration, writes `greybound-monitor.log`, and writes `target/greybound-nox30-monitor.wav`.
@@ -16,13 +16,13 @@ This renders the standalone Nox30 path for a bounded duration, writes `greybound
 For a shorter verification run:
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir --monitor
 ```
 
 ## Fuzz Render
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir --monitor
 ```
 
 This renders the Muffin into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-fuzz-monitor.wav`.
@@ -30,13 +30,13 @@ This renders the Muffin into the Nox30 path, writes `greybound-monitor.log`, and
 For Muffin into the Nox30 model:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir --monitor
 ```
 
 ## Overdrive Render
 
 ```bash
-target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor
+target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir --monitor
 ```
 
 This renders the Minotaur into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-overdrive-nox30-monitor.wav`.
@@ -66,7 +66,7 @@ The audio thread reads knob updates through atomics, so the terminal UI does not
 
 Recent monitor runs with the driven Nox30 configuration showed clean input and zero xruns, but severe output clipping at the selected output level. Treat clipping in this workflow as a model or gain-staging issue until analysis proves otherwise.
 
-A short `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 44100 --period-size 16 --ir --monitor` run produced a valid mono 44.1 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
+A short `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir --monitor` run produced a valid mono 48 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
 
 ## Log Analysis Agent
 

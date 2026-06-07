@@ -295,9 +295,14 @@ Milestone 5: export and Rust equivalence
 
 Current status: partially implemented. Python/NumPy can read the exported
 descriptor and weights, and the Rust core has an experimental scalar MLP loader
-and inference path. Generated-vector Python/Rust equivalence is available through
-`export-neural-cell-vectors` and `make lab-check-neural-cell-rust`. Audio runtime
-integration is still pending.
+and inference path. The Rust side also has a preallocated `NeuralCellRuntime`
+intended for audio use; generated-vector Python/Rust equivalence is available
+through `export-neural-cell-vectors` and `make lab-check-neural-cell-rust`, and
+that test now exercises the runtime path. Nox30 has a first-stage shadow path
+behind `GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR`; it runs the neural
+adapter beside the analytic stage and reports monitor-log error, but it does not
+feed the neural output into the audio path. Audio replacement is still pending
+and must stay behind an explicit experimental gate.
 
 Cell-level SPICE evaluation is also implemented through `evaluate-neural-cell`.
 The first static MLP beats the zero baseline overall but remains weak on the hot
@@ -311,13 +316,18 @@ not justified yet. A diagnostic gain/latency correction only improves the
 analytic baseline from about `80 mV` weighted RMSE to about `70 mV`, which means
 the residual is not mostly a calibration offset. The next useful investigation is
 the model mismatch itself: transfer shape, bias dynamics, discretization, and
-fixture equivalence.
+fixture equivalence. The evaluator now includes harmonic and IMD shape sections;
+the first run shows small THD/IMD deltas, so the likely missing information is
+dynamic state or exact fixture behavior rather than a simple static nonlinear
+curve.
 
 Milestone 6: integration check
 
-- Replace or shadow a single Greybound cell in an offline render.
+- Shadow a single Greybound cell in an offline render.
 - Compare the complete rig against SPICE-derived expectations and NAM reference
   trends.
+- Replace the cell only behind a separate explicit gate after shadow evidence
+  improves.
 - Promote only if the change improves the full-chain evidence.
 
 ## Decision Gates

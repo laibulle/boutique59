@@ -268,10 +268,10 @@ uv --project lab run --with torch greybound-lab train-neural-cell \
 
 It trains a small static MLP and exports `model.greybound.json` plus
 `weights.greybound.bin`. This is an export-path milestone, not a final tube
-model. The Rust core now has an experimental reader/inference implementation for
-that artifact shape. The next acceptance-relevant work is to add generated-vector
-equivalence tests and compare the exported artifact against both SPICE holdouts
-and Greybound's current analytic approximation.
+model. The Rust core now has an experimental reader and a preallocated
+`NeuralCellRuntime` for that artifact shape. The next acceptance-relevant work
+is to compare the exported artifact against both SPICE holdouts and Greybound's
+current analytic approximation.
 
 The generated-vector equivalence check is now available:
 
@@ -283,8 +283,15 @@ uv --project lab run greybound-lab export-neural-cell-vectors \
 make lab-check-neural-cell-rust
 ```
 
-This proves Python and Rust agree on the exported artifact. It does not prove
-the model is a good tube replacement yet.
+This proves Python and Rust agree on the exported artifact through the runtime
+path intended for future audio integration. It does not prove the model is a
+good tube replacement yet.
+
+Nox30 has a first-stage shadow path behind
+`GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR`. The neural adapter runs beside
+the analytic first stage and monitor telemetry reports its absolute error, but
+the audio still uses the analytic stage. This is the first integration gate
+before any replacement experiment.
 
 The cell-level SPICE evaluation command is:
 
@@ -312,7 +319,10 @@ common-cathode stage, compared with about `245 mV` for the first MLP. Therefore
 the first neural artifact should not replace the analytic solver. It is a
 pipeline proof. A diagnostic gain/latency correction lowers the analytic
 residual only to about `70 mV`, so the next scientific step is model-shape
-analysis against SPICE rather than immediate runtime integration.
+analysis against SPICE rather than immediate runtime integration. The first
+harmonic and IMD shape checks show small THD/IMD deltas, so the next pass should
+not blindly scale the MLP. It should isolate dynamic state and fixture
+equivalence before deciding whether the learned component needs memory.
 
 Phase 4: first fitted micro-model
 

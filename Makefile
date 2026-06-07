@@ -9,7 +9,7 @@ SAMPLE_RATE ?= 48000
 PERIOD_SIZE ?= 16
 INPUT_DB ?= 0
 OUTPUT_DB ?= -12
-TEST_INPUT_WAV ?= samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav
+TEST_INPUT_WAV ?= lab/references/tone3000-inputs/Brit - Guitar.wav
 TEST_OUTPUT_WAV ?= target/greybound-nox30-monitor.wav
 RENDER_SECONDS ?= 20
 RIG ?=
@@ -24,7 +24,7 @@ NAM_PACK_MANIFEST ?= lab/references/nam/manifests/ac30hwh-6580.json
 NAM_TONE_URL ?= https://www.tone3000.com/tones/ac30hwh-6580
 NAM_MODEL ?= lab/references/nam/AC30HWH/TopBoost-Gain5.nam
 NAM_RENDERER ?= uv run --python 3.11 --with neural-amp-modeler==0.13.0 --with scipy python lab/scripts/nam_a2_render.py --model {model} --input {input_wav} --output {output_wav} --sample-rate {sample_rate} --seconds {render_seconds} --input-db {input_db} --output-db {output_db}
-NAM_INPUT_WAV ?= samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav
+NAM_INPUT_WAV ?= lab/references/tone3000-inputs/Brit - Guitar.wav
 NAM_OUTPUT_WAV ?= lab/references/nam/renders/ac30hwh-6580-topboost-gain5.wav
 NAM_METADATA ?= lab/references/nam/renders/ac30hwh-6580-topboost-gain5.run.json
 NAM_SAMPLE_RATE ?= 48000
@@ -170,6 +170,15 @@ lab-evaluate-neural-cell:
 		--stride "$(NEURAL_STRIDE)" \
 		--split "$(NEURAL_EVAL_SPLIT)"
 
+lab-shadow-nox30-first-stage: RIG = rigs/nox30-driven.json5
+lab-shadow-nox30-first-stage: INPUT=file
+lab-shadow-nox30-first-stage: OUTPUT=wav
+lab-shadow-nox30-first-stage: MONITOR=1
+lab-shadow-nox30-first-stage: IR=1
+lab-shadow-nox30-first-stage:
+	GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR="$(NEURAL_DESCRIPTOR)" \
+		$(MAKE) standalone-run RIG="$(RIG)" INPUT="$(INPUT)" OUTPUT="$(OUTPUT)" MONITOR="$(MONITOR)" IR="$(IR)"
+
 lab-evaluate-analytic-common-cathode:
 	cargo run -p greybound --example common_cathode_dataset_eval -- \
 		--manifest "$(NEURAL_DATASET_MANIFEST)" \
@@ -177,4 +186,4 @@ lab-evaluate-analytic-common-cathode:
 		--stride "$(NEURAL_STRIDE)" \
 		--split "$(NEURAL_EVAL_SPLIT)"
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-evaluate-analytic-common-cathode
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-analytic-common-cathode

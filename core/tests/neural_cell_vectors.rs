@@ -26,6 +26,7 @@ fn generated_neural_cell_vectors_match_rust_loader() {
     };
     let cell = ExperimentalNeuralCell::from_descriptor_path(&descriptor_path)
         .expect("failed to load generated neural-cell descriptor");
+    let mut runtime = cell.prepare_runtime();
     let text =
         fs::read_to_string(&vectors_path).expect("failed to read generated neural-cell vectors");
     let vectors: VectorFile =
@@ -36,7 +37,7 @@ fn generated_neural_cell_vectors_match_rust_loader() {
     );
 
     for case in vectors.cases {
-        let actual = cell.process_sample(case.input_v);
+        let actual = runtime.process_sample(case.input_v);
         let error = (actual - case.expected_output_v).abs();
         assert!(
             error <= vectors.tolerance_abs,

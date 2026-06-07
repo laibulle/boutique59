@@ -68,7 +68,7 @@ Greybound requires the input WAV sample rate to match `--sample-rate`. NAM A2 is
 48 kHz, so the dry sample was resampled to:
 
 ```text
-lab/stimuli/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major-48k.wav
+lab/references/tone3000-inputs/Brit - Guitar.wav
 ```
 
 The resampled file is ignored by git. The generator command should be promoted
@@ -80,7 +80,7 @@ NAM render:
 
 ```sh
 make lab-render-nam \
-  NAM_INPUT_WAV=lab/stimuli/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major-48k.wav \
+  NAM_INPUT_WAV="lab/references/tone3000-inputs/Brit - Guitar.wav" \
   NAM_INPUT_DB=-40 \
   NAM_OUTPUT_DB=-24 \
   NAM_OUTPUT_WAV=lab/references/nam/renders/ac30hwh-6580-topboost-gain5-input-40.wav \
@@ -92,7 +92,7 @@ Greybound render:
 ```sh
 uv --project lab run greybound-lab render-rig \
   --rig rigs/nox30-driven.json5 \
-  --input-wav lab/stimuli/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major-48k.wav \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven-for-nam-topboost-gain5-input-40.wav \
   --metadata lab/renders/nox30-driven-for-nam-topboost-gain5-input-40.run.json \
   --render-seconds 20 \

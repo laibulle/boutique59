@@ -742,6 +742,9 @@ struct ComponentTelemetry {
     power_cathode_bias_max_bits: AtomicU32,
     transformer_flux_abs_sum: AtomicU64,
     transformer_flux_abs_max_bits: AtomicU32,
+    first_stage_shadow_count: AtomicU64,
+    first_stage_shadow_abs_error_sum: AtomicU64,
+    first_stage_shadow_abs_error_max_bits: AtomicU32,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -769,6 +772,9 @@ struct ComponentTelemetrySnapshot {
     power_cathode_bias_max: f32,
     transformer_flux_abs_avg: f32,
     transformer_flux_abs_max: f32,
+    first_stage_shadow_count: u64,
+    first_stage_shadow_abs_error_avg: f32,
+    first_stage_shadow_abs_error_max: f32,
 }
 
 impl MonitorStats {
@@ -868,6 +874,9 @@ impl Default for ComponentTelemetry {
             power_cathode_bias_max_bits: AtomicU32::new(0),
             transformer_flux_abs_sum: AtomicU64::new(0),
             transformer_flux_abs_max_bits: AtomicU32::new(0),
+            first_stage_shadow_count: AtomicU64::new(0),
+            first_stage_shadow_abs_error_sum: AtomicU64::new(0),
+            first_stage_shadow_abs_error_max_bits: AtomicU32::new(0),
         }
     }
 }
@@ -882,6 +891,15 @@ impl ComponentTelemetry {
         let power_screen_current = operating_point.power_positive_screen_current
             + operating_point.power_negative_screen_current;
         let transformer_flux_abs = operating_point.transformer_core_flux.abs();
+        if let Some(error_v) = operating_point.first_stage_shadow_error_v {
+            record_telemetry_max(
+                error_v.abs(),
+                &self.first_stage_shadow_abs_error_sum,
+                &self.first_stage_shadow_abs_error_max_bits,
+            );
+            self.first_stage_shadow_count
+                .fetch_add(1, Ordering::Relaxed);
+        }
 
         record_telemetry_min(
             operating_point.preamp_voltage,
@@ -943,6 +961,7 @@ impl ComponentTelemetry {
 
     fn snapshot_and_reset(&self) -> ComponentTelemetrySnapshot {
         let count = self.count.swap(0, Ordering::Relaxed);
+        let first_stage_shadow_count = self.first_stage_shadow_count.swap(0, Ordering::Relaxed);
         ComponentTelemetrySnapshot {
             count,
             preamp_voltage_avg: telemetry_average(
@@ -1000,6 +1019,15 @@ impl ComponentTelemetry {
                 count,
             ),
             transformer_flux_abs_max: reset_max(&self.transformer_flux_abs_max_bits),
+            first_stage_shadow_count,
+            first_stage_shadow_abs_error_avg: telemetry_average(
+                self.first_stage_shadow_abs_error_sum
+                    .swap(0, Ordering::Relaxed),
+                first_stage_shadow_count,
+            ),
+            first_stage_shadow_abs_error_max: reset_max(
+                &self.first_stage_shadow_abs_error_max_bits,
+            ),
         }
     }
 }
@@ -1122,7 +1150,7 @@ fn format_audio_monitor(stats: &MonitorSnapshot) -> String {
 }
 
 fn format_component_telemetry(components: ComponentTelemetrySnapshot) -> String {
-    format!(
+    let mut line = format!(
         "CMP n={} rails avg/min pre {:.0}/{:.0} pi {:.0}/{:.0} pwr {:.0}/{:.0} scr {:.0}/{:.0} V | I avg/max first {:.2}/{:.2} pi {:.2}/{:.2} pwr {:.1}/{:.1} atk {:.1}/{:.1} scr {:.1}/{:.1} mA | cath avg/max {:.2}/{:.2} V | flux abs avg/max {:.5}/{:.5}",
         components.count,
         components.preamp_voltage_avg,
@@ -1147,7 +1175,16 @@ fn format_component_telemetry(components: ComponentTelemetrySnapshot) -> String 
         components.power_cathode_bias_max,
         components.transformer_flux_abs_avg,
         components.transformer_flux_abs_max,
-    )
+    );
+    if components.first_stage_shadow_count > 0 {
+        line.push_str(&format!(
+            " | shadow first abs err avg/max {:.5}/{:.5} V n {}",
+            components.first_stage_shadow_abs_error_avg,
+            components.first_stage_shadow_abs_error_max,
+            components.first_stage_shadow_count,
+        ));
+    }
+    line
 }
 
 fn vu_meter(level: f32, width: usize) -> String {
@@ -1222,6 +1259,14 @@ fn format_monitor_dashboard(
             components.transformer_flux_abs_max,
             components.count,
         ));
+        if components.first_stage_shadow_count > 0 {
+            text.push_str(&format!(
+                "🧪 shadow first abs err avg/max {:.5}/{:.5} V   n {}\n",
+                components.first_stage_shadow_abs_error_avg,
+                components.first_stage_shadow_abs_error_max,
+                components.first_stage_shadow_count,
+            ));
+        }
     }
 
     text.push_str("Press Ctrl-C to stop.\n");
@@ -3530,11 +3575,11 @@ mod tests {
     #[test]
     fn loads_sample_wav_input_channel() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav");
+            .join("../lab/references/tone3000-inputs/Brit - Guitar.wav");
         let wav = load_wav_input(&path, 0).unwrap();
 
-        assert_eq!(wav.sample_rate, 44_100);
-        assert_eq!(wav.channels, 2);
+        assert_eq!(wav.sample_rate, 48_000);
+        assert_eq!(wav.channels, 1);
         assert!(!wav.samples.is_empty());
         assert!(wav.samples.iter().all(|sample| sample.is_finite()));
     }
@@ -3565,6 +3610,9 @@ mod tests {
             power_cathode_bias_max: 10.8,
             transformer_flux_abs_avg: 0.00031,
             transformer_flux_abs_max: 0.0012,
+            first_stage_shadow_count: 0,
+            first_stage_shadow_abs_error_avg: 0.0,
+            first_stage_shadow_abs_error_max: 0.0,
         };
 
         let line = format_component_telemetry(telemetry);
@@ -3574,6 +3622,22 @@ mod tests {
         assert!(line.contains("pwr 71.0/120.0 atk 14.0/26.0 scr 4.7/9.4 mA"));
         assert!(line.contains("cath avg/max 9.40/10.80 V"));
         assert!(line.contains("flux abs avg/max 0.00031/0.00120"));
+        assert!(!line.contains("shadow first"));
+    }
+
+    #[test]
+    fn component_telemetry_formats_shadow_error_when_present() {
+        let telemetry = ComponentTelemetrySnapshot {
+            count: 128,
+            first_stage_shadow_count: 128,
+            first_stage_shadow_abs_error_avg: 0.0123,
+            first_stage_shadow_abs_error_max: 0.0456,
+            ..ComponentTelemetrySnapshot::default()
+        };
+
+        let line = format_component_telemetry(telemetry);
+
+        assert!(line.contains("shadow first abs err avg/max 0.01230/0.04560 V n 128"));
     }
 
     #[test]
@@ -3589,6 +3653,8 @@ mod tests {
             follower_cathode_voltage: 100.0,
             drive_stage_plate_current: 0.001,
             recovery_stage_plate_current: 0.001,
+            first_stage_shadow_output_v: None,
+            first_stage_shadow_error_v: None,
             phase_inverter_plate_a_current: 0.001,
             phase_inverter_plate_b_current: 0.001,
             phase_inverter_cathode_voltage: 35.0,
@@ -3611,6 +3677,8 @@ mod tests {
             follower_cathode_voltage: 100.0,
             drive_stage_plate_current: 0.001,
             recovery_stage_plate_current: 0.001,
+            first_stage_shadow_output_v: None,
+            first_stage_shadow_error_v: None,
             phase_inverter_plate_a_current: 0.004,
             phase_inverter_plate_b_current: 0.003,
             phase_inverter_cathode_voltage: 35.0,
@@ -3679,6 +3747,9 @@ mod tests {
                 power_cathode_bias_max: 10.8,
                 transformer_flux_abs_avg: 0.00031,
                 transformer_flux_abs_max: 0.0012,
+                first_stage_shadow_count: 0,
+                first_stage_shadow_abs_error_avg: 0.0,
+                first_stage_shadow_abs_error_max: 0.0,
             }),
             "nox30",
             Path::new("greybound-monitor.log"),

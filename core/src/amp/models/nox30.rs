@@ -12,11 +12,19 @@ use crate::circuit::triode::{
     CathodeFollowerParams, CathodeFollowerStage, CommonCathodeParams, CommonCathodeStage,
     LongTailPairParams, LongTailPairStage, TriodeParams,
 };
+use crate::neural_cell::{
+    CommonCathodeNeuralAdapter, CommonCathodeNeuralAdapterParams, ExperimentalNeuralCell,
+};
+use std::env;
+use std::path::PathBuf;
 
 pub(in crate::amp) struct Nox30 {
     sample_rate: f32,
     input_volume: BrightVolumeInputStage,
     first_stage: CommonCathodeStage,
+    first_stage_shadow: Option<CommonCathodeNeuralAdapter>,
+    first_stage_shadow_output_v: Option<f32>,
+    first_stage_shadow_error_v: Option<f32>,
     follower: CathodeFollowerStage,
     drive_stage: CommonCathodeStage,
     recovery_stage: CommonCathodeStage,
@@ -43,6 +51,9 @@ impl Nox30 {
             sample_rate,
             input_volume: BrightVolumeInputStage::new(input_volume_params(sample_rate)),
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
+            first_stage_shadow: first_stage_shadow_adapter(),
+            first_stage_shadow_output_v: None,
+            first_stage_shadow_error_v: None,
             follower: CathodeFollowerStage::new(follower_params(sample_rate)),
             drive_stage: CommonCathodeStage::new(drive_stage_params(sample_rate)),
             recovery_stage: CommonCathodeStage::new(recovery_stage_params(sample_rate)),
@@ -76,6 +87,8 @@ impl Nox30 {
             follower_cathode_voltage: follower.cathode_voltage,
             drive_stage_plate_current: drive.plate_current,
             recovery_stage_plate_current: recovery.plate_current,
+            first_stage_shadow_output_v: self.first_stage_shadow_output_v,
+            first_stage_shadow_error_v: self.first_stage_shadow_error_v,
             phase_inverter_plate_a_current: phase_inverter.plate_a_current,
             phase_inverter_plate_b_current: phase_inverter.plate_b_current,
             phase_inverter_cathode_voltage: phase_inverter.cathode_voltage,
@@ -102,6 +115,14 @@ impl Nox30 {
         let volume_output = self.input_volume.process(input, controls.volume);
 
         let first_stage = self.first_stage.process(volume_output);
+        if let Some(shadow) = &mut self.first_stage_shadow {
+            let shadow_output = shadow.process_sample(volume_output);
+            self.first_stage_shadow_output_v = Some(shadow_output);
+            self.first_stage_shadow_error_v = Some(shadow_output - first_stage);
+        } else {
+            self.first_stage_shadow_output_v = None;
+            self.first_stage_shadow_error_v = None;
+        }
         let first_stage_current = self.first_stage.operating_point().plate_current;
 
         let follower_drive = self.follower.process(first_stage * preamp_voltage);
@@ -228,6 +249,19 @@ fn first_stage_params(sample_rate: f32) -> CommonCathodeParams {
         output_scale: 0.16,
         triode: TriodeParams::ECC83,
     }
+}
+
+fn first_stage_shadow_adapter() -> Option<CommonCathodeNeuralAdapter> {
+    let descriptor = env::var_os("GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR")?;
+    let cell = ExperimentalNeuralCell::from_descriptor_path(PathBuf::from(descriptor)).ok()?;
+    let params = first_stage_params(1.0);
+    Some(CommonCathodeNeuralAdapter::from_cell(
+        cell,
+        CommonCathodeNeuralAdapterParams {
+            input_gain: params.input_gain,
+            output_scale: params.output_scale,
+        },
+    ))
 }
 
 fn follower_params(sample_rate: f32) -> CathodeFollowerParams {

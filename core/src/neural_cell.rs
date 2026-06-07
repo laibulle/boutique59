@@ -11,6 +11,27 @@ pub struct ExperimentalNeuralCell {
 }
 
 #[derive(Clone, Debug)]
+pub struct NeuralCellRuntime {
+    cell: ExperimentalNeuralCell,
+    scratch_a: Vec<f32>,
+    scratch_b: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CommonCathodeNeuralAdapterParams {
+    pub input_gain: f32,
+    pub output_scale: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommonCathodeNeuralAdapter {
+    runtime: NeuralCellRuntime,
+    params: CommonCathodeNeuralAdapterParams,
+    last_plate_ac_v: f32,
+    last_output_v: f32,
+}
+
+#[derive(Clone, Debug)]
 struct DenseLayer {
     in_features: usize,
     out_features: usize,
@@ -100,6 +121,14 @@ impl ExperimentalNeuralCell {
         values[0] * self.normalization.output_std + self.normalization.output_mean
     }
 
+    pub fn prepare_runtime(&self) -> NeuralCellRuntime {
+        NeuralCellRuntime::new(self.clone())
+    }
+
+    pub fn into_runtime(self) -> NeuralCellRuntime {
+        NeuralCellRuntime::new(self)
+    }
+
     pub fn process_block(&self, input_v: &[f32], output_v: &mut [f32]) -> Result<()> {
         if input_v.len() != output_v.len() {
             bail!(
@@ -161,6 +190,114 @@ impl ExperimentalNeuralCell {
             layers,
             normalization,
         })
+    }
+}
+
+impl NeuralCellRuntime {
+    pub fn new(cell: ExperimentalNeuralCell) -> Self {
+        let max_width = cell
+            .layers
+            .iter()
+            .map(|layer| layer.in_features.max(layer.out_features))
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        Self {
+            cell,
+            scratch_a: vec![0.0; max_width],
+            scratch_b: vec![0.0; max_width],
+        }
+    }
+
+    #[inline]
+    pub fn process_sample(&mut self, input_v: f32) -> f32 {
+        self.scratch_a[0] =
+            (input_v - self.cell.normalization.input_mean) / self.cell.normalization.input_std;
+        let mut input_len = 1;
+        for (index, layer) in self.cell.layers.iter().enumerate() {
+            debug_assert_eq!(input_len, layer.in_features);
+            for out_index in 0..layer.out_features {
+                let row = out_index * layer.in_features;
+                let mut sum = layer.bias[out_index];
+                for in_index in 0..layer.in_features {
+                    sum += layer.weight[row + in_index] * self.scratch_a[in_index];
+                }
+                self.scratch_b[out_index] = if index + 1 == self.cell.layers.len() {
+                    sum
+                } else {
+                    sum.tanh()
+                };
+            }
+            self.scratch_a[..layer.out_features]
+                .copy_from_slice(&self.scratch_b[..layer.out_features]);
+            input_len = layer.out_features;
+        }
+        self.scratch_a[0] * self.cell.normalization.output_std + self.cell.normalization.output_mean
+    }
+
+    pub fn process_block(&mut self, input_v: &[f32], output_v: &mut [f32]) -> Result<()> {
+        if input_v.len() != output_v.len() {
+            bail!(
+                "neural-cell input/output length mismatch: {} != {}",
+                input_v.len(),
+                output_v.len()
+            );
+        }
+        for (input, output) in input_v.iter().zip(output_v.iter_mut()) {
+            *output = self.process_sample(*input);
+        }
+        Ok(())
+    }
+}
+
+impl CommonCathodeNeuralAdapter {
+    pub fn new(runtime: NeuralCellRuntime, params: CommonCathodeNeuralAdapterParams) -> Self {
+        Self {
+            runtime,
+            params,
+            last_plate_ac_v: 0.0,
+            last_output_v: 0.0,
+        }
+    }
+
+    pub fn from_cell(
+        cell: ExperimentalNeuralCell,
+        params: CommonCathodeNeuralAdapterParams,
+    ) -> Self {
+        Self::new(cell.into_runtime(), params)
+    }
+
+    #[inline]
+    pub fn process_sample(&mut self, input_v: f32) -> f32 {
+        let plate_ac_v = self
+            .runtime
+            .process_sample(input_v * self.params.input_gain);
+        let output_v = -plate_ac_v * self.params.output_scale;
+        self.last_plate_ac_v = plate_ac_v;
+        self.last_output_v = output_v;
+        output_v
+    }
+
+    pub fn process_block(&mut self, input_v: &[f32], output_v: &mut [f32]) -> Result<()> {
+        if input_v.len() != output_v.len() {
+            bail!(
+                "common-cathode neural adapter input/output length mismatch: {} != {}",
+                input_v.len(),
+                output_v.len()
+            );
+        }
+        for (input, output) in input_v.iter().zip(output_v.iter_mut()) {
+            *output = self.process_sample(*input);
+        }
+        Ok(())
+    }
+
+    pub fn last_plate_ac_v(&self) -> f32 {
+        self.last_plate_ac_v
+    }
+
+    pub fn last_output_v(&self) -> f32 {
+        self.last_output_v
     }
 }
 
@@ -268,6 +405,114 @@ mod tests {
         let mut output = [0.0, 0.0];
         cell.process_block(&[1.0, 3.0], &mut output).unwrap();
         assert_eq!(output, [10.0, 14.0]);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn runtime_matches_descriptor_path_for_multilayer_cell() {
+        let dir = test_dir("runtime_matches_descriptor_path_for_multilayer_cell");
+        fs::create_dir_all(&dir).unwrap();
+        write_test_weights(
+            &dir.join("weights.greybound.bin"),
+            &[
+                (&[0.5_f32, -0.25_f32][..], &[0.1_f32, -0.2_f32][..]),
+                (&[0.75_f32, -1.5_f32][..], &[0.05_f32][..]),
+            ],
+        );
+        fs::write(
+            dir.join("model.greybound.json"),
+            r#"{
+              architecture: { family: "mlp", activation: "tanh" },
+              io: {
+                normalization: {
+                  input_mean: 0.1,
+                  input_std: 0.4,
+                  output_mean: -0.2,
+                  output_std: 1.7,
+                },
+              },
+              weights: {
+                format: "greybound-bin-v1",
+                path: "weights.greybound.bin",
+                dtype: "f32",
+                endianness: "little",
+                layout: [
+                  { in_features: 1, out_features: 2 },
+                  { in_features: 2, out_features: 1 },
+                ],
+              },
+            }"#,
+        )
+        .unwrap();
+
+        let cell =
+            ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
+        let mut runtime = cell.prepare_runtime();
+        for input in [-0.8, -0.1, 0.0, 0.35, 1.2] {
+            assert_eq!(runtime.process_sample(input), cell.process_sample(input));
+        }
+        let mut runtime_output = [0.0; 5];
+        runtime
+            .process_block(&[-0.8, -0.1, 0.0, 0.35, 1.2], &mut runtime_output)
+            .unwrap();
+        let mut reference_output = [0.0; 5];
+        cell.process_block(&[-0.8, -0.1, 0.0, 0.35, 1.2], &mut reference_output)
+            .unwrap();
+        assert_eq!(runtime_output, reference_output);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn common_cathode_adapter_maps_plate_ac_to_stage_output() {
+        let dir = test_dir("common_cathode_adapter_maps_plate_ac_to_stage_output");
+        fs::create_dir_all(&dir).unwrap();
+        write_test_weights(
+            &dir.join("weights.greybound.bin"),
+            &[(&[2.0_f32][..], &[0.5_f32][..])],
+        );
+        fs::write(
+            dir.join("model.greybound.json"),
+            r#"{
+              architecture: { family: "mlp", activation: "tanh" },
+              io: {
+                normalization: {
+                  input_mean: 0.0,
+                  input_std: 1.0,
+                  output_mean: 0.0,
+                  output_std: 1.0,
+                },
+              },
+              weights: {
+                format: "greybound-bin-v1",
+                path: "weights.greybound.bin",
+                dtype: "f32",
+                endianness: "little",
+                layout: [{ in_features: 1, out_features: 1 }],
+              },
+            }"#,
+        )
+        .unwrap();
+
+        let cell =
+            ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
+        let mut adapter = CommonCathodeNeuralAdapter::from_cell(
+            cell,
+            CommonCathodeNeuralAdapterParams {
+                input_gain: 3.0,
+                output_scale: 0.25,
+            },
+        );
+
+        let output = adapter.process_sample(0.5);
+        assert_eq!(adapter.last_plate_ac_v(), 3.5);
+        assert_eq!(output, -0.875);
+        assert_eq!(adapter.last_output_v(), -0.875);
+
+        let mut block_output = [0.0, 0.0];
+        adapter
+            .process_block(&[0.0, 1.0], &mut block_output)
+            .unwrap();
+        assert_eq!(block_output, [-0.125, -1.625]);
         let _ = fs::remove_dir_all(dir);
     }
 

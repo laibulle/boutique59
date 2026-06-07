@@ -33,11 +33,11 @@ Render a Greybound rig into the lab with reproducible metadata:
 ```sh
 uv --project lab run greybound-lab render-rig \
   --rig rigs/nox30-driven.json5 \
-  --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven.wav \
   --metadata lab/renders/nox30-driven.run.json \
   --render-seconds 10 \
-  --sample-rate 44100 \
+  --sample-rate 48000 \
   --period-size 16 \
   --output-db -18 \
   --ir
@@ -48,7 +48,7 @@ Generate standard lab stimuli for focused metrics:
 ```sh
 uv --project lab run greybound-lab generate-stimuli \
   --output-dir lab/stimuli \
-  --sample-rate 44100
+  --sample-rate 48000
 ```
 
 Run the first SPICE cell reference:
@@ -135,6 +135,18 @@ The first local run shows the expected pattern for a static smoke-test MLP: it
 beats the zero baseline overall, but it is still weak on the hot held-out sine
 case. Treat that as a pipeline success and a model-quality warning.
 
+The Rust core has a preallocated `NeuralCellRuntime` for future audio
+integration. It is validated by generated Python/Rust vectors, but it is not
+wired into Nox30 audio yet. Nox30 can run a first-stage neural shadow beside the
+analytic stage and report monitor-log error with:
+
+```sh
+make lab-shadow-nox30-first-stage
+```
+
+Keep replacement experiments behind a separate explicit gate until the
+cell-level residual evidence improves.
+
 Compare the existing Rust analytic common-cathode stage against the same SPICE
 dataset:
 
@@ -148,7 +160,10 @@ proving the pipeline, but it is not a better replacement than the current Rust
 cell. A diagnostic gain/latency correction only reduces the analytic residual to
 about `70 mV`, so the remaining error is not mostly a trivial level or timing
 offset. Treat the residual as model-shape evidence: nonlinear transfer, bias
-dynamics, discretization, or fixture mismatch.
+dynamics, discretization, or fixture mismatch. The same report now includes
+harmonic and IMD shape checks; current THD/IMD deltas are small, which pushes the
+next investigation toward dynamic state and fixture equivalence rather than a
+larger static curve fit.
 
 Download public TONE3000 DI input WAV files for local NAM and Greybound
 integration tests:
@@ -185,7 +200,7 @@ Render a NAM model once an external NAM A2 renderer is installed:
 ```sh
 uv --project lab run greybound-lab render-nam \
   --model lab/references/nam/AC30HWH/TopBoost-Gain5.nam \
-  --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/references/nam/renders/ac30hwh-6580-topboost-gain5.wav \
   --metadata lab/references/nam/renders/ac30hwh-6580-topboost-gain5.run.json \
   --renderer-command "uv run --python 3.11 --with neural-amp-modeler==0.13.0 --with scipy python lab/scripts/nam_a2_render.py --model {model} --input {input_wav} --output {output_wav} --sample-rate {sample_rate} --seconds {render_seconds} --input-db {input_db} --output-db {output_db}" \

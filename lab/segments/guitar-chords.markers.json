@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source": "samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav",
+  "source": "lab/references/tone3000-inputs/Brit - Guitar.wav",
   "notes": "Initial hand-authored regions for coarse Greybound render comparison. These are analysis anchors, not musical ground truth.",
   "segments": [
     {

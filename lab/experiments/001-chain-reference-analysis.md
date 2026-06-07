@@ -32,11 +32,11 @@ Render a candidate:
 ```sh
 uv --project lab run greybound-lab render-rig \
   --rig rigs/nox30-driven.json5 \
-  --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven.wav \
   --metadata lab/renders/nox30-driven.run.json \
   --render-seconds 10 \
-  --sample-rate 44100 \
+  --sample-rate 48000 \
   --period-size 16 \
   --output-db -18 \
   --ir
@@ -59,7 +59,7 @@ musical DI:
 ```sh
 uv --project lab run greybound-lab generate-stimuli \
   --output-dir lab/stimuli \
-  --sample-rate 44100
+  --sample-rate 48000
 ```
 
 Python is the primary lab language because the long-term work needs the
@@ -121,7 +121,7 @@ and exercises the full chain:
 - guitar DI input from `samples/`,
 - `rigs/nox30-driven.json5`,
 - speaker IR enabled,
-- 44.1 kHz or 48 kHz,
+- 48 kHz or 48 kHz,
 - fixed output gain chosen to avoid clipping.
 
 Do not start with a high-gain distortion pedal chain. Compression, clipping, and

@@ -112,11 +112,11 @@ Use `render-rig` to call the release `greybound-cli`, write a WAV into
 ```sh
 uv --project lab run greybound-lab render-rig \
   --rig rigs/nox30-driven.json5 \
-  --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven.wav \
   --metadata lab/renders/nox30-driven.run.json \
   --render-seconds 10 \
-  --sample-rate 44100 \
+  --sample-rate 48000 \
   --period-size 16 \
   --output-db -18 \
   --ir
@@ -143,7 +143,7 @@ and matching marker files:
 ```sh
 uv --project lab run greybound-lab generate-stimuli \
   --output-dir lab/stimuli \
-  --sample-rate 44100
+  --sample-rate 48000
 ```
 
 The generated set currently includes:
@@ -241,6 +241,32 @@ The generated vectors are local artifacts. The Rust test is optional during
 normal test runs and becomes active when `GREYBOUND_NEURAL_CELL_DESCRIPTOR` and
 `GREYBOUND_NEURAL_CELL_VECTORS` point to the local files.
 
+The Rust side now has two layers:
+
+- `ExperimentalNeuralCell`: descriptor/weight loader and scalar reference path,
+- `NeuralCellRuntime`: preallocated streaming runtime intended for future audio
+  integration.
+
+The generated-vector test runs through `NeuralCellRuntime`, so the integration
+candidate is checked against Python-exported golden values without allocating per
+sample.
+
+Nox30 has an explicit first-stage shadow path, but it does not replace the
+analytic audio path. Set `GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR` to a
+local `model.greybound.json` and the first common-cathode neural adapter will run
+beside the analytic `first_stage`. Monitor telemetry then reports
+`shadow first abs err avg/max` when the shadow is active. The sound still comes
+from the analytic stage.
+
+The convenience command is:
+
+```sh
+make lab-shadow-nox30-first-stage
+```
+
+This is an integration diagnostic only. Promotion to audio replacement still
+requires better model-quality and dynamic-state evidence.
+
 Evaluate the artifact against the SPICE dataset in physical units:
 
 ```sh
@@ -279,6 +305,14 @@ nonlinear transfer, dynamic biasing, solver discretization, and exact fixture
 equivalence. The best-lag columns are diagnostic only; periodic sine stimuli can
 produce phase-equivalent lags and negative gains that should not be interpreted
 as physical circuit latency.
+
+The same evaluator now reports level-normalized harmonic and IMD shape. The
+first result is deliberately conservative: THD is within about `0.2 dB` across
+the sine sweep, and the hotter two-tone IMD case is within about `0.1 dB`.
+Therefore the remaining time-domain residual is not obviously a gross static
+transfer error. The next cell-level investigation should isolate dynamic state:
+cathode bypass memory, supply movement, phase behavior, operating-point
+trajectory, or exact SPICE/Rust fixture equivalence.
 
 ## NAM References
 

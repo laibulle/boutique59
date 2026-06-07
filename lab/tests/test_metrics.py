@@ -104,6 +104,53 @@ def test_segment_aliasing_and_sag_metrics_are_reported() -> None:
     assert sag.candidate_drop_db < sag.reference_drop_db
 
 
+def test_segment_intermodulation_metrics_are_reported() -> None:
+    sample_rate = 48_000
+    time = np.arange(sample_rate, dtype=np.float64) / sample_rate
+    reference = 0.5 * (
+        np.sin(2.0 * np.pi * 997.0 * time)
+        + np.sin(2.0 * np.pi * 1_499.0 * time)
+    )
+    candidate = reference + 0.05 * np.sin(2.0 * np.pi * (2.0 * 997.0 - 1_499.0) * time)
+
+    metrics = compare_signals(
+        candidate,
+        reference,
+        sample_rate,
+        segments=[
+            SegmentSpec(
+                name="imd",
+                start_s=0.1,
+                end_s=0.8,
+                kind="imd",
+                first_hz=997.0,
+                second_hz=1_499.0,
+            )
+        ],
+    )
+
+    imd = metrics.segments[0].imd
+    assert imd is not None
+    assert imd.imd_delta_db > 20.0
+    assert imd.lower_sideband_delta_db is not None
+
+
+def test_band_residual_metrics_find_affected_band() -> None:
+    sample_rate = 48_000
+    time = np.arange(sample_rate, dtype=np.float64) / sample_rate
+    reference = np.sin(2.0 * np.pi * 2_000.0 * time)
+    candidate = reference + 0.1 * np.sin(2.0 * np.pi * 3_000.0 * time)
+
+    segment = compare_signals(
+        candidate,
+        reference,
+        sample_rate,
+        segments=[SegmentSpec(name="mid", start_s=0.0, end_s=1.0, kind="general")],
+    ).segments[0]
+
+    assert segment.band_residual.mid_db > segment.band_residual.presence_db
+
+
 def _sine(sample_rate: int, seconds: float) -> np.ndarray:
     time = np.arange(int(sample_rate * seconds), dtype=np.float64) / sample_rate
     return np.sin(2.0 * np.pi * 997.0 * time)

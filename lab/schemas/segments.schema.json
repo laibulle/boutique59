@@ -38,9 +38,17 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["general", "attack", "sustain", "decay", "harmonic", "aliasing", "sag", "silence"]
+            "enum": ["general", "attack", "sustain", "decay", "harmonic", "imd", "aliasing", "sag", "silence"]
           },
           "fundamental_hz": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "first_hz": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "second_hz": {
             "type": "number",
             "exclusiveMinimum": 0
           },

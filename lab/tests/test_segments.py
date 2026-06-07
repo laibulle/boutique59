@@ -19,6 +19,8 @@ def test_loads_segments(tmp_path: Path) -> None:
                         "start_s": 0.1,
                         "end_s": 0.2,
                         "fundamental_hz": 440.0,
+                        "first_hz": 440.0,
+                        "second_hz": 550.0,
                         "notes": "test",
                     }
                 ],
@@ -34,3 +36,5 @@ def test_loads_segments(tmp_path: Path) -> None:
     assert segments[0].kind == "attack"
     assert segments[0].duration_s == 0.1
     assert segments[0].fundamental_hz == 440.0
+    assert segments[0].first_hz == 440.0
+    assert segments[0].second_hz == 550.0

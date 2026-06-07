@@ -12,6 +12,8 @@ class SegmentSpec:
     end_s: float
     kind: str = "general"
     fundamental_hz: float | None = None
+    first_hz: float | None = None
+    second_hz: float | None = None
     notes: str | None = None
 
     @property
@@ -45,6 +47,12 @@ def _parse_segment(path: Path, payload: object) -> SegmentSpec:
     fundamental_hz = payload.get("fundamental_hz")
     if fundamental_hz is not None and not isinstance(fundamental_hz, int | float):
         raise ValueError(f"{name} has an invalid fundamental_hz")
+    first_hz = payload.get("first_hz")
+    second_hz = payload.get("second_hz")
+    if first_hz is not None and not isinstance(first_hz, int | float):
+        raise ValueError(f"{name} has an invalid first_hz")
+    if second_hz is not None and not isinstance(second_hz, int | float):
+        raise ValueError(f"{name} has an invalid second_hz")
     notes = payload.get("notes")
     if notes is not None and not isinstance(notes, str):
         raise ValueError(f"{name} has invalid notes")
@@ -54,5 +62,7 @@ def _parse_segment(path: Path, payload: object) -> SegmentSpec:
         end_s=float(end_s),
         kind=kind,
         fundamental_hz=float(fundamental_hz) if fundamental_hz is not None else None,
+        first_hz=float(first_hz) if first_hz is not None else None,
+        second_hz=float(second_hz) if second_hz is not None else None,
         notes=notes,
     )

@@ -53,6 +53,15 @@ uv --project lab run greybound-lab compare-wav \
   --report lab/reports/nox30-driven-vs-reference.md
 ```
 
+Generate focused stimuli when a metric needs controlled input instead of a
+musical DI:
+
+```sh
+uv --project lab run greybound-lab generate-stimuli \
+  --output-dir lab/stimuli \
+  --sample-rate 44100
+```
+
 Python is the primary lab language because the long-term work needs the
 scientific audio, plotting, optimization, and neural tooling ecosystem. Rust is
 still the target for accepted runtime artifacts.
@@ -89,9 +98,11 @@ Minimum useful metrics:
 - log-spectrum distance,
 - transient envelope error.
 - segment-local gain, residual, spectrum, and envelope error.
+- band-local residual for low, low-mid, mid, presence, and air ranges.
 - attack peak timing, rise timing, and overshoot difference.
 - high-band residual for aliasing triage.
 - sag drop and recovery deltas on dynamic windows.
+- harmonic and intermodulation analysis on generated stimuli.
 
 Useful later metrics:
 

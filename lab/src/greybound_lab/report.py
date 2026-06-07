@@ -93,6 +93,22 @@ def _render_segments(segments: tuple[SegmentComparisonMetrics, ...]) -> str:
 
 def _render_specialized_segments(segments: tuple[SegmentComparisonMetrics, ...]) -> list[str]:
     lines: list[str] = []
+    lines.extend(
+        [
+            "### Band Residual Diagnostics",
+            "",
+            "| Segment | Low 40-250 | Low-mid 250-1k | Mid 1-4k | Presence 4-8k | Air 8-18k |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for segment in segments:
+        band = segment.band_residual
+        lines.append(
+            f"| {segment.name} | {band.low_db:.2f} | {band.low_mid_db:.2f} | "
+            f"{band.mid_db:.2f} | {band.presence_db:.2f} | {band.air_db:.2f} |"
+        )
+    lines.append("")
+
     attack_segments = [segment for segment in segments if segment.attack is not None]
     if attack_segments:
         lines.extend(
@@ -129,6 +145,27 @@ def _render_specialized_segments(segments: tuple[SegmentComparisonMetrics, ...])
                 f"{harmonics.reference_thd_db:.2f} | {harmonics.thd_delta_db:.2f} | "
                 f"{_optional_db(harmonics.h2_delta_db)} | {_optional_db(harmonics.h3_delta_db)} | "
                 f"{_optional_db(harmonics.h4_delta_db)} | {_optional_db(harmonics.h5_delta_db)} |"
+            )
+        lines.append("")
+
+    imd_segments = [segment for segment in segments if segment.imd is not None]
+    if imd_segments:
+        lines.extend(
+            [
+                "### Intermodulation Diagnostics",
+                "",
+                "| Segment | F1 Hz | F2 Hz | IMD cand dB | IMD ref dB | IMD delta dB | 2F1-F2 | 2F2-F1 | F2-F1 | F1+F2 |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for segment in imd_segments:
+            assert segment.imd is not None
+            imd = segment.imd
+            lines.append(
+                f"| {segment.name} | {imd.first_hz:.1f} | {imd.second_hz:.1f} | "
+                f"{imd.candidate_imd_db:.2f} | {imd.reference_imd_db:.2f} | {imd.imd_delta_db:.2f} | "
+                f"{_optional_db(imd.lower_sideband_delta_db)} | {_optional_db(imd.upper_sideband_delta_db)} | "
+                f"{_optional_db(imd.difference_delta_db)} | {_optional_db(imd.sum_delta_db)} |"
             )
         lines.append("")
 

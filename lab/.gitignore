@@ -3,12 +3,14 @@ datasets/*
 references/*
 renders/*
 reports/*
+stimuli/*
 
 # Keep directory placeholders.
 !datasets/.gitkeep
 !references/.gitkeep
 !renders/.gitkeep
 !reports/.gitkeep
+!stimuli/.gitkeep
 
 # Tool caches.
 .venv/

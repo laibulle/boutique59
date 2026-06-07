@@ -43,6 +43,14 @@ uv --project lab run greybound-lab render-rig \
   --ir
 ```
 
+Generate standard lab stimuli for focused metrics:
+
+```sh
+uv --project lab run greybound-lab generate-stimuli \
+  --output-dir lab/stimuli \
+  --sample-rate 44100
+```
+
 ## Start Here
 
 The first R&D target is not training. It is measurement.
@@ -78,6 +86,11 @@ and report.
 
 : Committed marker files that define named regions for local diagnostics:
   attacks, sustains, sag windows, high-band checks, and future harmonic tests.
+
+`stimuli/`
+
+: Generated synthetic WAV stimuli and marker files for harmonic, intermodulation,
+  aliasing, sag, and attack analysis. Ignored by git by default.
 
 `datasets/`
 
@@ -119,6 +132,8 @@ The first lab tool consumes WAV pairs and produces a Markdown report with:
 - null residual after alignment,
 - optional segment-level diagnostics with `--segments`,
 - attack, harmonic, high-band/aliasing, and sag metrics for typed segments,
+- band residual metrics for each segment,
+- intermodulation metrics for generated two-tone segments,
 - short engineering notes for the next model decision.
 
 This gives us a useful baseline before NAM, SPICE, or training choices become

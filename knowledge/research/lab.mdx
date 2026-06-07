@@ -45,7 +45,8 @@ The first implemented loop is complete-chain WAV analysis.
 1. Render a Greybound rig to a WAV file and metadata JSON.
 2. Compare that WAV against a reference WAV.
 3. Optionally provide segment markers for local diagnostics.
-4. Read the generated Markdown report to decide what to investigate next.
+4. Generate synthetic stimuli when the metric needs controlled input.
+5. Read the generated Markdown report to decide what to investigate next.
 
 This is deliberately before NAM integration or neural training. Without a
 stable comparison loop, training would produce numbers without engineering
@@ -92,6 +93,30 @@ The metadata file records:
 - IR enabled state,
 - local environment summary.
 
+## Generate Stimuli
+
+Some metrics are not reliable on a musical DI because the input does not isolate
+the behavior being measured. Use `generate-stimuli` to create controlled WAVs
+and matching marker files:
+
+```sh
+uv --project lab run greybound-lab generate-stimuli \
+  --output-dir lab/stimuli \
+  --sample-rate 44100
+```
+
+The generated set currently includes:
+
+- `sine-level-sweep.wav`: harmonic distortion and level-dependent behavior.
+- `two-tone-imd.wav`: intermodulation-oriented input windows.
+- `aliasing-stress.wav`: high-frequency sine and sweep stress for nonlinear
+  aliasing triage.
+- `sag-bursts.wav`: repeated low-frequency bursts for supply/compression
+  recovery behavior.
+- `pluck-attacks.wav`: synthetic plucks for attack timing and overshoot.
+
+Generated stimuli are ignored by git. The generator code is the source of truth.
+
 ## Compare WAV Files
 
 Use `compare-wav` to compare a candidate WAV against a reference WAV:
@@ -115,13 +140,82 @@ The current report includes:
 - log-spectral distance,
 - envelope error,
 - optional segment-level local gain, residual, spectrum, and envelope metrics,
+- band-local residual across low, low-mid, mid, presence, and air ranges,
 - attack peak timing, rise timing, and overshoot deltas,
+- two-tone intermodulation diagnostics,
 - high-band residual checks for aliasing triage,
 - sag drop and recovery deltas on dynamic windows.
 
 These metrics are diagnostic, not a single quality score. They should tell us
 whether the difference is mostly alignment, gain, spectral shape, transient
 behavior, or nonlinear dynamics.
+
+## Metric Families
+
+Latency and gain alignment:
+
+: Makes comparisons fair. A model can look wrong simply because it is shifted by
+  a few samples or louder than the reference. The lab estimates candidate
+  latency and applies an optimal gain before residual metrics.
+
+RMS, peak, and crest factor:
+
+: Checks gain staging and dynamic shape. Crest factor is especially useful for
+  spotting over-compression, missing transient energy, or unexpected clipping.
+
+Null residual:
+
+: Measures what remains after latency and gain correction. It is sensitive and
+  useful for regressions, but it should not be treated as a complete perceptual
+  score.
+
+Band residual:
+
+: Splits the residual by broad musical ranges: low, low-mid, mid, presence, and
+  air. This tells us where to investigate. A mid-band error points toward gain
+  stages, tone networks, or speaker color; a presence/air error may point toward
+  cab/IR, anti-aliasing, or high-frequency nonlinear behavior.
+
+Log-spectral distance:
+
+: Tracks broad EQ, harmonic balance, cab/IR color, and frequency-dependent
+  differences. It is useful for finding tonal drift, but it can hide transient
+  and dynamic errors.
+
+Envelope error:
+
+: Tracks amplitude shape over time. It helps identify compression, sustain,
+  decay, tremolo/modulation depth, and slow dynamic mismatch.
+
+Attack diagnostics:
+
+: Compare peak timing, rise timing, and overshoot in short windows. This is
+  important for pick feel, immediacy, and whether a model blunts or exaggerates
+  the front of notes.
+
+Harmonic diagnostics:
+
+: Compare THD and H2-H5 balance on stable sine windows. This is useful for
+  diode clippers, triodes, overdrives, fuzzes, and any nonlinear stage where
+  even/odd harmonic structure matters.
+
+High-band / aliasing diagnostics:
+
+: Measure high-frequency energy and high-band residual. This is a triage metric
+  for nonlinear aliasing; it should be used with generated high-frequency
+  stimuli, not trusted blindly on arbitrary guitar DI.
+
+Sag diagnostics:
+
+: Compare level drop and recovery inside burst windows. This targets supply sag,
+  bias shift, compression memory, and other slow dynamic behaviors.
+
+Intermodulation:
+
+: Compares two-tone intermodulation products such as `2F1-F2`, `2F2-F1`,
+  `F2-F1`, and `F1+F2` relative to the main tones. This matters for nonlinear
+  stages because intermodulation often reveals harshness and chord smear better
+  than THD.
 
 ## Segment Markers
 
@@ -149,6 +243,8 @@ Supported segment kinds today:
 - `attack`: adds peak timing, rise timing, and overshoot comparison.
 - `harmonic`: adds THD and H2-H5 deltas; use `fundamental_hz` when the segment
   is a known sine or stable note.
+- `imd`: adds two-tone intermodulation diagnostics; use `first_hz` and
+  `second_hz` when the tones are known.
 - `aliasing`: adds high-band and high-band residual checks.
 - `sag`: adds drop and recovery comparison across the segment.
 
@@ -170,6 +266,11 @@ the bundled dry guitar sample, not a canonical transcription of the performance.
 `lab/segments/`
 
 : Committed segment marker files used for local diagnostics.
+
+`lab/stimuli/`
+
+: Generated synthetic WAV stimuli and generated marker files. Ignored by git;
+  regenerate them with `generate-stimuli`.
 
 `lab/datasets/`
 
@@ -199,6 +300,10 @@ Implemented:
 - segment marker schema,
 - segment-level diagnostics for attack, harmonic, high-band/aliasing, and sag
   windows,
+- band residual diagnostics for every segment,
+- intermodulation diagnostics for two-tone segments,
+- generated stimuli for harmonic, high-band/aliasing, sag, attack, and future
+  intermodulation protocols,
 - tests for metric alignment and metadata generation,
 - first experiment plan for chain reference analysis.
 
@@ -208,7 +313,6 @@ Not implemented yet:
 - NAM profile rendering/import workflow,
 - SPICE automation,
 - dataset manifests for training,
-- generated synthetic stimuli for harmonic, aliasing, and sag protocols,
 - fitted micro-model training,
 - Rust artifact export.
 
@@ -218,7 +322,8 @@ The next useful improvements are:
 
 - add plots to comparison reports,
 - define a real reference WAV protocol,
-- generate dedicated test stimuli for harmonics, aliasing, and sag,
+- add a stronger aliasing score that separates harmonics from folded non-harmonic
+  residuals,
 - standardize one Nox30-style NAM comparison,
 - add SPICE export analysis for one small circuit cell,
 - decide the first fitted cell only after the reports show where the largest

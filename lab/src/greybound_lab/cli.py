@@ -8,6 +8,7 @@ from greybound_lab.metrics import compare_signals
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import render_rig
 from greybound_lab.segments import load_segments
+from greybound_lab.stimuli import generate_stimuli
 
 
 def main() -> None:
@@ -35,11 +36,17 @@ def main() -> None:
     render.add_argument("--output-db", type=float, default=-18.0)
     render.add_argument("--ir", action="store_true")
 
+    stimuli = subparsers.add_parser("generate-stimuli", help="Generate standard lab WAV stimuli and marker files.")
+    stimuli.add_argument("--output-dir", type=Path, default=Path("lab/stimuli"))
+    stimuli.add_argument("--sample-rate", type=int, default=44_100)
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
     elif args.command == "render-rig":
         run_render_rig(args)
+    elif args.command == "generate-stimuli":
+        run_generate_stimuli(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -85,6 +92,13 @@ def run_render_rig(args: argparse.Namespace) -> None:
     )
     print(f"wrote {args.output_wav}")
     print(f"wrote {args.metadata}")
+
+
+def run_generate_stimuli(args: argparse.Namespace) -> None:
+    generated = generate_stimuli(args.output_dir, sample_rate_hz=args.sample_rate)
+    for item in generated:
+        print(f"wrote {item.wav_path}")
+        print(f"wrote {item.markers_path}")
 
 
 if __name__ == "__main__":

@@ -49,8 +49,10 @@ class SegmentComparisonMetrics:
     null_relative_db: float
     log_spectral_distance_db: float
     envelope_error_db: float
+    band_residual: BandResidualMetrics
     attack: AttackMetrics | None = None
     harmonics: HarmonicMetrics | None = None
+    imd: IntermodulationMetrics | None = None
     aliasing: AliasingMetrics | None = None
     sag: SagMetrics | None = None
 
@@ -79,6 +81,19 @@ class HarmonicMetrics:
 
 
 @dataclass(frozen=True)
+class IntermodulationMetrics:
+    first_hz: float
+    second_hz: float
+    candidate_imd_db: float
+    reference_imd_db: float
+    imd_delta_db: float
+    lower_sideband_delta_db: float | None
+    upper_sideband_delta_db: float | None
+    difference_delta_db: float | None
+    sum_delta_db: float | None
+
+
+@dataclass(frozen=True)
 class AliasingMetrics:
     candidate_high_band_dbfs: float
     reference_high_band_dbfs: float
@@ -94,6 +109,15 @@ class SagMetrics:
     candidate_recovery_db: float
     reference_recovery_db: float
     recovery_delta_db: float
+
+
+@dataclass(frozen=True)
+class BandResidualMetrics:
+    low_db: float
+    low_mid_db: float
+    mid_db: float
+    presence_db: float
+    air_db: float
 
 
 def compare_signals(
@@ -169,6 +193,7 @@ def compare_segment(
         null_relative_db=linear_to_db(rms(residual) / max(reference_rms, EPSILON)),
         log_spectral_distance_db=log_spectral_distance(locally_corrected, reference, sample_rate_hz),
         envelope_error_db=envelope_error(locally_corrected, reference),
+        band_residual=band_residual_metrics(locally_corrected, reference, sample_rate_hz),
         attack=attack_metrics(locally_corrected, reference, sample_rate_hz) if kind == "attack" else None,
         harmonics=harmonic_metrics(
             locally_corrected,
@@ -177,6 +202,15 @@ def compare_segment(
             segment.fundamental_hz,
         )
         if kind == "harmonic"
+        else None,
+        imd=intermodulation_metrics(
+            locally_corrected,
+            reference,
+            sample_rate_hz,
+            segment.first_hz,
+            segment.second_hz,
+        )
+        if kind == "imd"
         else None,
         aliasing=aliasing_metrics(locally_corrected, reference, sample_rate_hz) if kind == "aliasing" else None,
         sag=sag_metrics(locally_corrected, reference, sample_rate_hz) if kind == "sag" else None,
@@ -326,6 +360,42 @@ def aliasing_metrics(candidate: np.ndarray, reference: np.ndarray, sample_rate_h
     )
 
 
+def intermodulation_metrics(
+    candidate: np.ndarray,
+    reference: np.ndarray,
+    sample_rate_hz: int,
+    first_hz: float | None,
+    second_hz: float | None,
+) -> IntermodulationMetrics:
+    f1, f2 = _two_tone_frequencies(reference, sample_rate_hz, first_hz, second_hz)
+    candidate_lines = _line_levels(candidate, sample_rate_hz, _imd_frequencies(f1, f2))
+    reference_lines = _line_levels(reference, sample_rate_hz, _imd_frequencies(f1, f2))
+    candidate_imd = _imd_ratio_db(candidate_lines, f1, f2)
+    reference_imd = _imd_ratio_db(reference_lines, f1, f2)
+    return IntermodulationMetrics(
+        first_hz=f1,
+        second_hz=f2,
+        candidate_imd_db=candidate_imd,
+        reference_imd_db=reference_imd,
+        imd_delta_db=candidate_imd - reference_imd,
+        lower_sideband_delta_db=_line_ratio_delta(candidate_lines, reference_lines, 2.0 * f1 - f2, f1, f2),
+        upper_sideband_delta_db=_line_ratio_delta(candidate_lines, reference_lines, 2.0 * f2 - f1, f1, f2),
+        difference_delta_db=_line_ratio_delta(candidate_lines, reference_lines, abs(f2 - f1), f1, f2),
+        sum_delta_db=_line_ratio_delta(candidate_lines, reference_lines, f1 + f2, f1, f2),
+    )
+
+
+def band_residual_metrics(candidate: np.ndarray, reference: np.ndarray, sample_rate_hz: int) -> BandResidualMetrics:
+    residual = candidate - reference
+    return BandResidualMetrics(
+        low_db=_band_relative_residual(residual, reference, sample_rate_hz, 40.0, 250.0),
+        low_mid_db=_band_relative_residual(residual, reference, sample_rate_hz, 250.0, 1_000.0),
+        mid_db=_band_relative_residual(residual, reference, sample_rate_hz, 1_000.0, 4_000.0),
+        presence_db=_band_relative_residual(residual, reference, sample_rate_hz, 4_000.0, 8_000.0),
+        air_db=_band_relative_residual(residual, reference, sample_rate_hz, 8_000.0, min(18_000.0, sample_rate_hz / 2.0)),
+    )
+
+
 def sag_metrics(candidate: np.ndarray, reference: np.ndarray, sample_rate_hz: int) -> SagMetrics:
     candidate_drop, candidate_recovery = _sag_shape(candidate, sample_rate_hz)
     reference_drop, reference_recovery = _sag_shape(reference, sample_rate_hz)
@@ -414,6 +484,21 @@ def _harmonic_levels(samples: np.ndarray, sample_rate_hz: int, fundamental_hz: f
     return levels
 
 
+def _line_levels(samples: np.ndarray, sample_rate_hz: int, frequencies_hz: list[float]) -> dict[float, float]:
+    windowed = _windowed(samples)
+    spectrum = np.abs(np.fft.rfft(windowed))
+    freqs = np.fft.rfftfreq(samples.shape[0], 1.0 / sample_rate_hz)
+    levels: dict[float, float] = {}
+    for frequency_hz in frequencies_hz:
+        if frequency_hz <= 0.0 or frequency_hz >= sample_rate_hz / 2.0:
+            continue
+        index = int(np.argmin(np.abs(freqs - frequency_hz)))
+        left = max(0, index - 1)
+        right = min(spectrum.shape[0], index + 2)
+        levels[frequency_hz] = float(np.sqrt(np.sum(np.square(spectrum[left:right]))))
+    return levels
+
+
 def _thd_db(levels: dict[int, float]) -> float:
     fundamental = levels.get(1, 0.0)
     harmonic_power = sum(level * level for harmonic, level in levels.items() if harmonic > 1)
@@ -428,6 +513,71 @@ def _harmonic_delta(candidate: dict[int, float], reference: dict[int, float], ha
     return linear_to_db(candidate_ratio / max(reference_ratio, EPSILON))
 
 
+def _two_tone_frequencies(
+    reference: np.ndarray,
+    sample_rate_hz: int,
+    first_hz: float | None,
+    second_hz: float | None,
+) -> tuple[float, float]:
+    if first_hz is not None and second_hz is not None:
+        return (min(first_hz, second_hz), max(first_hz, second_hz))
+    spectrum = np.abs(np.fft.rfft(_windowed(reference)))
+    freqs = np.fft.rfftfreq(reference.shape[0], 1.0 / sample_rate_hz)
+    mask = (freqs >= 40.0) & (freqs <= min(6_000.0, sample_rate_hz / 2.0))
+    candidate_indices = np.flatnonzero(mask)
+    if candidate_indices.size < 2:
+        return 440.0, 550.0
+    strongest = candidate_indices[np.argsort(spectrum[candidate_indices])[-8:]]
+    strongest = sorted(strongest, key=lambda index: spectrum[index], reverse=True)
+    selected: list[int] = []
+    for index in strongest:
+        if all(abs(freqs[index] - freqs[other]) > 20.0 for other in selected):
+            selected.append(int(index))
+        if len(selected) == 2:
+            break
+    if len(selected) < 2:
+        return 440.0, 550.0
+    first, second = sorted(float(freqs[index]) for index in selected)
+    return first, second
+
+
+def _imd_frequencies(first_hz: float, second_hz: float) -> list[float]:
+    return [
+        first_hz,
+        second_hz,
+        abs(second_hz - first_hz),
+        first_hz + second_hz,
+        2.0 * first_hz - second_hz,
+        2.0 * second_hz - first_hz,
+    ]
+
+
+def _imd_ratio_db(levels: dict[float, float], first_hz: float, second_hz: float) -> float:
+    fundamental_power = levels.get(first_hz, 0.0) ** 2 + levels.get(second_hz, 0.0) ** 2
+    product_power = 0.0
+    for frequency in _imd_frequencies(first_hz, second_hz):
+        if frequency in (first_hz, second_hz):
+            continue
+        product_power += levels.get(frequency, 0.0) ** 2
+    return linear_to_db(np.sqrt(product_power) / max(np.sqrt(fundamental_power), EPSILON))
+
+
+def _line_ratio_delta(
+    candidate: dict[float, float],
+    reference: dict[float, float],
+    frequency_hz: float,
+    first_hz: float,
+    second_hz: float,
+) -> float | None:
+    if frequency_hz <= 0.0 or frequency_hz not in candidate or frequency_hz not in reference:
+        return None
+    candidate_fundamental = np.sqrt(candidate.get(first_hz, 0.0) ** 2 + candidate.get(second_hz, 0.0) ** 2)
+    reference_fundamental = np.sqrt(reference.get(first_hz, 0.0) ** 2 + reference.get(second_hz, 0.0) ** 2)
+    candidate_ratio = candidate[frequency_hz] / max(candidate_fundamental, EPSILON)
+    reference_ratio = reference[frequency_hz] / max(reference_fundamental, EPSILON)
+    return linear_to_db(candidate_ratio / max(reference_ratio, EPSILON))
+
+
 def _band_rms(samples: np.ndarray, sample_rate_hz: int, low_hz: float, high_hz: float) -> float:
     if samples.size < 8:
         return 0.0
@@ -437,6 +587,18 @@ def _band_rms(samples: np.ndarray, sample_rate_hz: int, low_hz: float, high_hz: 
     if not np.any(mask):
         return 0.0
     return float(np.sqrt(np.mean(np.square(np.abs(spectrum[mask])))) / max(samples.shape[0] / 2.0, 1.0))
+
+
+def _band_relative_residual(
+    residual: np.ndarray,
+    reference: np.ndarray,
+    sample_rate_hz: int,
+    low_hz: float,
+    high_hz: float,
+) -> float:
+    residual_level = _band_rms(residual, sample_rate_hz, low_hz, high_hz)
+    reference_level = _band_rms(reference, sample_rate_hz, low_hz, high_hz)
+    return linear_to_db(residual_level / max(reference_level, EPSILON))
 
 
 def _sag_shape(samples: np.ndarray, sample_rate_hz: int) -> tuple[float, float]:

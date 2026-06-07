@@ -15,6 +15,13 @@ pub(super) fn configure_nox30_first_stage_neural(
     nox30::configure_first_stage_neural(descriptor_path, mode);
 }
 
+pub(super) fn configure_nox30_first_stage_graybox(
+    config_path: Option<PathBuf>,
+    mode: NeuralCellMode,
+) {
+    nox30::configure_first_stage_graybox(config_path, mode);
+}
+
 pub(in crate::amp) enum AmpCore {
     Dumbler(Dumbler),
     Sheriff800(Sheriff800),

@@ -10,7 +10,8 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 use greybound::amp::{
-    configure_nox30_first_stage_neural, AmpControls, NeuralCellMode, Nox30OperatingPoint,
+    configure_nox30_first_stage_graybox, configure_nox30_first_stage_neural, AmpControls,
+    NeuralCellMode, Nox30OperatingPoint,
 };
 use greybound::ir::SpeakerStage;
 use greybound::{
@@ -2949,6 +2950,7 @@ struct Args {
     monitor_log: PathBuf,
     model: String,
     neural_cells: Vec<NeuralCellOverride>,
+    graybox_cells: Vec<GrayboxCellOverride>,
     neural_cell_mode: NeuralCellMode,
     disable_neural_cell: bool,
 }
@@ -2956,6 +2958,11 @@ struct Args {
 struct NeuralCellOverride {
     component: String,
     descriptor_path: PathBuf,
+}
+
+struct GrayboxCellOverride {
+    component: String,
+    config_path: PathBuf,
 }
 
 fn load_wav_input(path: &Path, input_channel: usize) -> Result<WavInput> {
@@ -3133,6 +3140,7 @@ fn main() -> Result<()> {
     let input_gain = args.input_gain;
     apply_neural_overrides(
         &args.neural_cells,
+        &args.graybox_cells,
         args.neural_cell_mode,
         args.disable_neural_cell,
     )?;
@@ -3447,6 +3455,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut monitor = false;
     let mut monitor_log = PathBuf::from("greybound-monitor.log");
     let mut neural_cells = Vec::new();
+    let mut graybox_cells = Vec::new();
     let mut neural_cell_mode = NeuralCellMode::Shadow;
     let mut disable_neural_cell = false;
     let mut args = env::args().skip(1);
@@ -3483,6 +3492,10 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--neural-cell" => neural_cells.push(parse_neural_cell_override(&next_value(
                 &mut args,
                 "--neural-cell",
+            )?)?),
+            "--graybox-cell" => graybox_cells.push(parse_graybox_cell_override(&next_value(
+                &mut args,
+                "--graybox-cell",
             )?)?),
             "--neural-cell-mode" => {
                 neural_cell_mode =
@@ -3577,6 +3590,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         monitor_log,
         model,
         neural_cells,
+        graybox_cells,
         neural_cell_mode,
         disable_neural_cell,
     })
@@ -3623,6 +3637,19 @@ fn parse_neural_cell_override(value: &str) -> Result<NeuralCellOverride> {
     })
 }
 
+fn parse_graybox_cell_override(value: &str) -> Result<GrayboxCellOverride> {
+    let (component, config) = value
+        .split_once('=')
+        .context("--graybox-cell expects COMPONENT=CONFIG, for example nox30.first_stage=accepted-live, nox30.first_stage=accepted, or nox30.first_stage=lab/models/common-cathode-12ax7-graybox-state-v0/common-cathode-graybox-state.json")?;
+    if component.trim().is_empty() || config.trim().is_empty() {
+        bail!("--graybox-cell expects non-empty COMPONENT=CONFIG");
+    }
+    Ok(GrayboxCellOverride {
+        component: component.trim().to_owned(),
+        config_path: PathBuf::from(config.trim()),
+    })
+}
+
 fn parse_neural_cell_mode(value: &str) -> Result<NeuralCellMode> {
     match value {
         "shadow" => Ok(NeuralCellMode::Shadow),
@@ -3640,6 +3667,7 @@ fn neural_cell_mode_name(mode: NeuralCellMode) -> &'static str {
 
 fn apply_neural_overrides(
     overrides: &[NeuralCellOverride],
+    graybox_overrides: &[GrayboxCellOverride],
     mode: NeuralCellMode,
     disable_neural_cell: bool,
 ) -> Result<()> {
@@ -3647,7 +3675,10 @@ fn apply_neural_overrides(
         configure_nox30_first_stage_neural(None, NeuralCellMode::Shadow);
         return Ok(());
     }
-    if overrides.is_empty() {
+    if !overrides.is_empty() && !graybox_overrides.is_empty() {
+        bail!("--neural-cell and --graybox-cell are mutually exclusive for the same run");
+    }
+    if overrides.is_empty() && graybox_overrides.is_empty() {
         return Ok(());
     }
     for override_ in overrides {
@@ -3657,6 +3688,17 @@ fn apply_neural_overrides(
             }
             other => bail!(
                 "unsupported --neural-cell component '{}'; supported: nox30.first_stage",
+                other
+            ),
+        }
+    }
+    for override_ in graybox_overrides {
+        match override_.component.as_str() {
+            "nox30.first_stage" => {
+                configure_nox30_first_stage_graybox(Some(override_.config_path.clone()), mode);
+            }
+            other => bail!(
+                "unsupported --graybox-cell component '{}'; supported: nox30.first_stage",
                 other
             ),
         }
@@ -3754,6 +3796,7 @@ fn print_help() {
          \x20 --monitor                 Show interactive VU meters and amp controls\n\
          \x20 --monitor-log PATH        Rotating monitor log [default: greybound-monitor.log]\n\
          \x20 --neural-cell COMPONENT=PATH  Run a neural counterpart for a supported component\n\
+         \x20 --graybox-cell COMPONENT=CONFIG  Run a gray-box counterpart; CONFIG may be 'accepted-live', 'accepted', or a JSON path\n\
          \x20 --neural-cell-mode MODE    Neural mode: shadow or replace [default: shadow]\n\
          \x20 --disable-neural-cell      Disable default and configured neural-cell replacements\n\
          \x20 --ir PATH                 Force-enable a speaker IR WAV path, even if the rig has no active cab\n\

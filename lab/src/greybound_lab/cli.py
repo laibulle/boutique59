@@ -5,6 +5,7 @@ from pathlib import Path
 
 from greybound_lab.audio import read_wav_mono
 from greybound_lab.external_inputs import download_tone3000_inputs, download_tone3000_irs
+from greybound_lab.graybox_cell import fit_common_cathode_graybox
 from greybound_lab.integrated_neural import evaluate_integrated_neural_cell
 from greybound_lab.metrics import compare_signals
 from greybound_lab.nam import write_nam_pack_manifest
@@ -73,7 +74,21 @@ def main() -> None:
     train_cell.add_argument("--hidden-size", type=int, default=32)
     train_cell.add_argument("--learning-rate", type=float, default=5.0e-4)
     train_cell.add_argument("--stride", type=int, default=8)
+    train_cell.add_argument("--history-samples", type=int, default=1)
     train_cell.add_argument("--seed", type=int, default=59)
+
+    fit_graybox = subparsers.add_parser(
+        "fit-graybox-cell",
+        help="Fit an experimental differentiable gray-box cell against a SPICE dataset manifest.",
+    )
+    fit_graybox.add_argument("--cell", required=True, choices=["common-cathode-12ax7-state"])
+    fit_graybox.add_argument("--dataset-manifest", required=True, type=Path)
+    fit_graybox.add_argument("--output-dir", type=Path, default=Path("lab/models/common-cathode-12ax7-graybox-state-current"))
+    fit_graybox.add_argument("--epochs", type=int, default=220)
+    fit_graybox.add_argument("--learning-rate", type=float, default=8.0e-3)
+    fit_graybox.add_argument("--stride", type=int, default=16)
+    fit_graybox.add_argument("--max-train-samples-per-stimulus", type=int, default=2048)
+    fit_graybox.add_argument("--seed", type=int, default=59)
 
     export_vectors = subparsers.add_parser(
         "export-neural-cell-vectors",
@@ -97,7 +112,8 @@ def main() -> None:
         "evaluate-integrated-neural-cell",
         help="Render analytic/shadow/replace Nox30 runs and compare the integrated neural counterpart.",
     )
-    integrated_cell.add_argument("--descriptor", required=True, type=Path)
+    integrated_cell.add_argument("--descriptor", type=Path)
+    integrated_cell.add_argument("--graybox-config", type=Path)
     integrated_cell.add_argument("--component", default="nox30.first_stage")
     integrated_cell.add_argument("--rig", type=Path, default=Path("rigs/nox30-driven.json5"))
     integrated_cell.add_argument("--input-wav", type=Path, default=Path("lab/references/tone3000-inputs/Brit - Guitar.wav"))
@@ -213,6 +229,8 @@ def main() -> None:
         run_spice_dataset(args)
     elif args.command == "train-neural-cell":
         run_train_neural_cell(args)
+    elif args.command == "fit-graybox-cell":
+        run_fit_graybox_cell(args)
     elif args.command == "export-neural-cell-vectors":
         run_export_neural_cell_vectors(args)
     elif args.command == "evaluate-neural-cell":
@@ -310,10 +328,28 @@ def run_train_neural_cell(args: argparse.Namespace) -> None:
         hidden_size=args.hidden_size,
         learning_rate=args.learning_rate,
         stride=args.stride,
+        history_samples=args.history_samples,
         seed=args.seed,
     )
     print(f"wrote {descriptor_path}")
     print(f"wrote {weights_path}")
+    print(f"wrote {report_path}")
+
+
+def run_fit_graybox_cell(args: argparse.Namespace) -> None:
+    if args.cell != "common-cathode-12ax7-state":
+        raise SystemExit(f"unsupported graybox cell {args.cell}")
+    config_path, report_path = fit_common_cathode_graybox(
+        manifest_path=args.dataset_manifest,
+        output_dir=args.output_dir,
+        repo_root=Path.cwd(),
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        stride=args.stride,
+        max_train_samples_per_stimulus=args.max_train_samples_per_stimulus,
+        seed=args.seed,
+    )
+    print(f"wrote {config_path}")
     print(f"wrote {report_path}")
 
 
@@ -338,12 +374,17 @@ def run_evaluate_neural_cell(args: argparse.Namespace) -> None:
 
 
 def run_evaluate_integrated_neural_cell(args: argparse.Namespace) -> None:
+    if args.descriptor is None and args.graybox_config is None:
+        raise SystemExit("--descriptor or --graybox-config is required")
+    if args.descriptor is not None and args.graybox_config is not None:
+        raise SystemExit("--descriptor and --graybox-config are mutually exclusive")
     result = evaluate_integrated_neural_cell(
         repo_root=Path.cwd(),
         binary=args.binary,
         rig=args.rig,
         input_wav=args.input_wav,
         descriptor=args.descriptor,
+        graybox_config=args.graybox_config,
         output_dir=args.output_dir,
         report=args.report,
         component=args.component,

@@ -1,6 +1,8 @@
 use greybound::ir::SpeakerStage;
 use greybound::{
-    AmpControls, DeviceSlotControls, RigConfig, SignalChain, SignalChainConfig, SignalChainControls,
+    configure_nox30_first_stage_graybox, configure_nox30_first_stage_neural, AmpControls,
+    DeviceSlotControls, NeuralCellMode, RigConfig, SignalChain, SignalChainConfig,
+    SignalChainControls,
 };
 use js_sys::Float32Array;
 use wasm_bindgen::prelude::*;
@@ -8,26 +10,32 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct GreyboundNox30 {
     chain: SignalChain,
+    chain_config: SignalChainConfig,
     controls: AmpControls,
     amp_enabled: bool,
     device_controls: Vec<DeviceSlotControls>,
     sample_rate: u32,
     speaker: SpeakerStage,
     speaker_enabled: bool,
+    first_stage_model: FirstStageModel,
 }
 
 #[wasm_bindgen]
 impl GreyboundNox30 {
     #[wasm_bindgen(constructor)]
     pub fn new(sample_rate: f32) -> Self {
+        configure_first_stage_model(FirstStageModel::Analytic);
+        let chain_config = SignalChainConfig::amp_only("nox30");
         Self {
-            chain: SignalChain::new(sample_rate, SignalChainConfig::amp_only("nox30")),
+            chain: SignalChain::new(sample_rate, chain_config.clone()),
+            chain_config,
             controls: default_controls(),
             amp_enabled: true,
             device_controls: Vec::new(),
             sample_rate: sample_rate as u32,
             speaker: SpeakerStage::bypassed(),
             speaker_enabled: false,
+            first_stage_model: FirstStageModel::Analytic,
         }
     }
 
@@ -45,14 +53,17 @@ impl GreyboundNox30 {
         let device_controls = rig
             .device_controls()
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        configure_first_stage_model(FirstStageModel::Analytic);
         Ok(Self {
-            chain: SignalChain::new(sample_rate, chain_config),
+            chain: SignalChain::new(sample_rate, chain_config.clone()),
+            chain_config,
             controls: rig.amp_controls(output_gain),
             amp_enabled: rig.amp_enabled(),
             device_controls,
             sample_rate: sample_rate as u32,
             speaker: SpeakerStage::bypassed(),
             speaker_enabled: false,
+            first_stage_model: FirstStageModel::Analytic,
         })
     }
 
@@ -110,6 +121,26 @@ impl GreyboundNox30 {
         Ok(())
     }
 
+    #[wasm_bindgen(js_name = setFirstStageModel)]
+    pub fn set_first_stage_model(&mut self, model: &str) -> Result<(), JsValue> {
+        let model = match model {
+            "analytic" => FirstStageModel::Analytic,
+            "graybox" | "accepted-graybox" => FirstStageModel::Graybox,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unsupported first-stage model '{other}'"
+                )))
+            }
+        };
+        if self.first_stage_model == model {
+            return Ok(());
+        }
+        configure_first_stage_model(model);
+        self.chain = SignalChain::new(self.sample_rate as f32, self.chain_config.clone());
+        self.first_stage_model = model;
+        Ok(())
+    }
+
     pub fn set_speaker_enabled(&mut self, enabled: bool) {
         self.speaker_enabled = enabled;
     }
@@ -153,6 +184,26 @@ impl GreyboundNox30 {
 #[wasm_bindgen]
 pub fn greybound_wasm_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FirstStageModel {
+    Analytic,
+    Graybox,
+}
+
+fn configure_first_stage_model(model: FirstStageModel) {
+    match model {
+        FirstStageModel::Analytic => {
+            configure_nox30_first_stage_neural(None, NeuralCellMode::Shadow);
+        }
+        FirstStageModel::Graybox => {
+            configure_nox30_first_stage_graybox(
+                Some("accepted-live".into()),
+                NeuralCellMode::Replace,
+            );
+        }
+    }
 }
 
 fn default_controls() -> AmpControls {

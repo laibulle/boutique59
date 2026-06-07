@@ -13,7 +13,8 @@ use crate::circuit::triode::{
     LongTailPairParams, LongTailPairStage, TriodeParams,
 };
 use crate::neural_cell::{
-    CommonCathodeNeuralAdapter, CommonCathodeNeuralAdapterParams, ExperimentalNeuralCell,
+    CommonCathodeGrayboxStateCell, CommonCathodeNeuralAdapter, CommonCathodeNeuralAdapterParams,
+    ExperimentalNeuralCell,
 };
 use std::env;
 use std::path::PathBuf;
@@ -26,16 +27,37 @@ struct FirstStageNeuralConfig {
 }
 
 #[derive(Clone)]
+struct FirstStageGrayboxConfig {
+    config_path: PathBuf,
+    mode: NeuralCellMode,
+}
+
+#[derive(Clone)]
 enum FirstStageNeuralSelection {
     Default,
     Disabled,
     Configured(FirstStageNeuralConfig),
+    Graybox(FirstStageGrayboxConfig),
 }
 
 struct FirstStageNeural {
-    adapter: CommonCathodeNeuralAdapter,
+    cell: FirstStageCell,
     mode: NeuralCellMode,
 }
+
+enum FirstStageCell {
+    Neural(CommonCathodeNeuralAdapter),
+    Graybox(CommonCathodeGrayboxAdapter),
+}
+
+struct CommonCathodeGrayboxAdapter {
+    cell: CommonCathodeGrayboxStateCell,
+    input_gain: f32,
+    output_scale: f32,
+    output_bias: f32,
+}
+
+const FIRST_STAGE_GRAYBOX_LIVE_INTEGRATION_GAIN: f32 = 0.82;
 
 static FIRST_STAGE_NEURAL_CONFIG: OnceLock<Mutex<FirstStageNeuralSelection>> = OnceLock::new();
 
@@ -166,7 +188,7 @@ impl Nox30 {
         let analytic_first_stage = self.first_stage.process(volume_output);
         let mut first_stage = analytic_first_stage;
         if let Some(neural) = &mut self.first_stage_neural {
-            let neural_output = neural.adapter.process_sample(volume_output);
+            let neural_output = neural.cell.process_sample(volume_output);
             self.first_stage_shadow_output_v = Some(neural_output);
             self.first_stage_shadow_error_v = Some(neural_output - analytic_first_stage);
             if neural.mode == NeuralCellMode::Replace {
@@ -330,36 +352,99 @@ pub(super) fn configure_first_stage_neural(descriptor_path: Option<PathBuf>, mod
         };
 }
 
+pub(super) fn configure_first_stage_graybox(config_path: Option<PathBuf>, mode: NeuralCellMode) {
+    let slot =
+        FIRST_STAGE_NEURAL_CONFIG.get_or_init(|| Mutex::new(FirstStageNeuralSelection::Default));
+    *slot.lock().expect("nox30 neural config mutex poisoned") =
+        if let Some(config_path) = config_path {
+            FirstStageNeuralSelection::Graybox(FirstStageGrayboxConfig { config_path, mode })
+        } else {
+            FirstStageNeuralSelection::Disabled
+        };
+}
+
 fn first_stage_neural(sample_rate: f32) -> Option<FirstStageNeural> {
     let config = match first_stage_neural_selection() {
         FirstStageNeuralSelection::Disabled => None,
         FirstStageNeuralSelection::Configured(config) => Some(config),
-        FirstStageNeuralSelection::Default => env_first_stage_neural(
-            "GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR",
-            NeuralCellMode::Shadow,
-        )
-        .or_else(|| {
+        FirstStageNeuralSelection::Graybox(config) => {
+            return first_stage_graybox(sample_rate, config)
+        }
+        FirstStageNeuralSelection::Default => {
+            if let Some(config) =
+                env_first_stage_graybox("GREYBOUND_NOX30_FIRST_STAGE_GRAYBOX_CONFIG")
+            {
+                return first_stage_graybox(sample_rate, config);
+            }
             env_first_stage_neural(
-                "GREYBOUND_NOX30_FIRST_STAGE_REPLACE_DESCRIPTOR",
-                NeuralCellMode::Replace,
+                "GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR",
+                NeuralCellMode::Shadow,
             )
-        })
-        .or_else(default_first_stage_neural),
+            .or_else(|| {
+                env_first_stage_neural(
+                    "GREYBOUND_NOX30_FIRST_STAGE_REPLACE_DESCRIPTOR",
+                    NeuralCellMode::Replace,
+                )
+            })
+            .or_else(default_first_stage_neural)
+        }
     }?;
     let cell = ExperimentalNeuralCell::from_descriptor_path(&config.descriptor_path).ok()?;
     let params = first_stage_params(sample_rate);
     let output_bias = common_cathode_silence_output(params);
     Some(FirstStageNeural {
-        adapter: CommonCathodeNeuralAdapter::from_cell(
+        cell: FirstStageCell::Neural(CommonCathodeNeuralAdapter::from_cell(
             cell,
             CommonCathodeNeuralAdapterParams {
                 input_gain: params.input_gain,
                 output_scale: params.output_scale,
                 output_bias,
             },
-        ),
+        )),
         mode: config.mode,
     })
+}
+
+fn first_stage_graybox(
+    sample_rate: f32,
+    config: FirstStageGrayboxConfig,
+) -> Option<FirstStageNeural> {
+    let cell = CommonCathodeGrayboxStateCell::from_config_path(&config.config_path).ok()?;
+    let params = first_stage_params(sample_rate);
+    let integration_gain = first_stage_graybox_integration_gain(&config.config_path);
+    Some(FirstStageNeural {
+        cell: FirstStageCell::Graybox(CommonCathodeGrayboxAdapter {
+            cell,
+            input_gain: params.input_gain,
+            output_scale: params.output_scale * integration_gain,
+            output_bias: common_cathode_silence_output(params),
+        }),
+        mode: config.mode,
+    })
+}
+
+fn first_stage_graybox_integration_gain(path: &std::path::Path) -> f32 {
+    match path.to_str() {
+        Some("accepted-live") | Some("live") => FIRST_STAGE_GRAYBOX_LIVE_INTEGRATION_GAIN,
+        _ => 1.0,
+    }
+}
+
+impl FirstStageCell {
+    #[inline]
+    fn process_sample(&mut self, input_v: f32) -> f32 {
+        match self {
+            Self::Neural(adapter) => adapter.process_sample(input_v),
+            Self::Graybox(adapter) => adapter.process_sample(input_v),
+        }
+    }
+}
+
+impl CommonCathodeGrayboxAdapter {
+    #[inline]
+    fn process_sample(&mut self, input_v: f32) -> f32 {
+        self.cell.process_sample(input_v * self.input_gain) * self.output_scale + self.output_bias
+    }
 }
 
 fn common_cathode_silence_output(params: CommonCathodeParams) -> f32 {
@@ -384,6 +469,13 @@ fn env_first_stage_neural(name: &str, mode: NeuralCellMode) -> Option<FirstStage
     env::var_os(name).map(|descriptor_path| FirstStageNeuralConfig {
         descriptor_path: PathBuf::from(descriptor_path),
         mode,
+    })
+}
+
+fn env_first_stage_graybox(name: &str) -> Option<FirstStageGrayboxConfig> {
+    env::var_os(name).map(|config_path| FirstStageGrayboxConfig {
+        config_path: PathBuf::from(config_path),
+        mode: NeuralCellMode::Replace,
     })
 }
 

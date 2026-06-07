@@ -255,18 +255,36 @@ fn load_wav_ir(path: &Path, sample_rate: u32) -> Result<Vec<f32>> {
 fn decode_wav_ir(bytes: &[u8], sample_rate: u32) -> Result<Vec<f32>> {
     let mut reader =
         hound::WavReader::new(Cursor::new(bytes)).context("could not decode speaker IR WAV")?;
-    if reader.spec().channels != 1 || reader.spec().sample_rate != sample_rate {
+    let spec = reader.spec();
+    if spec.channels != 1 || spec.sample_rate != sample_rate {
         bail!("reference speaker IR has an unexpected format");
     }
 
-    reader
-        .samples::<i32>()
-        .map(|sample| {
-            sample
-                .map(|value| value as f32 / 8_388_608.0)
-                .context("could not decode speaker IR")
-        })
-        .collect()
+    match spec.sample_format {
+        hound::SampleFormat::Float => {
+            if spec.bits_per_sample != 32 {
+                bail!("reference speaker IR has an unsupported float format");
+            }
+            reader
+                .samples::<f32>()
+                .map(|sample| sample.context("could not decode speaker IR"))
+                .collect()
+        }
+        hound::SampleFormat::Int => {
+            if spec.bits_per_sample == 0 || spec.bits_per_sample > 32 {
+                bail!("reference speaker IR has an unsupported integer format");
+            }
+            let scale = 2.0_f32.powi(spec.bits_per_sample as i32 - 1);
+            reader
+                .samples::<i32>()
+                .map(|sample| {
+                    sample
+                        .map(|value| (value as f32 / scale).clamp(-1.0, 1.0))
+                        .context("could not decode speaker IR")
+                })
+                .collect()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -295,6 +313,50 @@ mod tests {
             .collect();
 
         assert_eq!(output, input);
+    }
+
+    #[test]
+    fn decodes_pcm24_mono_ir() {
+        let mut bytes = Cursor::new(Vec::new());
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 24,
+            sample_format: hound::SampleFormat::Int,
+        };
+        {
+            let mut writer = hound::WavWriter::new(&mut bytes, spec).unwrap();
+            writer.write_sample(0_i32).unwrap();
+            writer.write_sample(4_194_304_i32).unwrap();
+            writer.finalize().unwrap();
+        }
+
+        let ir = decode_wav_ir(&bytes.into_inner(), 48_000).unwrap();
+
+        assert_eq!(ir.len(), 2);
+        assert!(ir[0].abs() < 1.0e-6);
+        assert!((ir[1] - 0.5).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn decodes_float32_mono_ir() {
+        let mut bytes = Cursor::new(Vec::new());
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 44_100,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        {
+            let mut writer = hound::WavWriter::new(&mut bytes, spec).unwrap();
+            writer.write_sample(0.25_f32).unwrap();
+            writer.write_sample(-0.5_f32).unwrap();
+            writer.finalize().unwrap();
+        }
+
+        let ir = decode_wav_ir(&bytes.into_inner(), 44_100).unwrap();
+
+        assert_eq!(ir, vec![0.25, -0.5]);
     }
 
     #[test]

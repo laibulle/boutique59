@@ -30,6 +30,7 @@ class PreparedDataset:
     output_mean: float
     output_std: float
     sample_rate_hz: int
+    history_samples: int
     train_ids: list[str]
     validation_ids: list[str]
     test_ids: list[str]
@@ -70,6 +71,7 @@ def train_common_cathode_mlp(
     hidden_size: int = 16,
     learning_rate: float = 1.0e-3,
     stride: int = 16,
+    history_samples: int = 1,
     seed: int = 59,
 ) -> tuple[Path, Path, Path]:
     torch = _import_torch()
@@ -79,10 +81,14 @@ def train_common_cathode_mlp(
     report_path = output_dir / "training-report.md"
 
     manifest = _read_json(manifest_path)
-    prepared = prepare_common_cathode_dataset(manifest_path, stride=stride)
+    prepared = prepare_common_cathode_dataset(
+        manifest_path,
+        stride=stride,
+        history_samples=history_samples,
+    )
     torch.manual_seed(seed)
     model = torch.nn.Sequential(
-        torch.nn.Linear(1, hidden_size),
+        torch.nn.Linear(prepared.history_samples, hidden_size),
         torch.nn.Tanh(),
         torch.nn.Linear(hidden_size, hidden_size),
         torch.nn.Tanh(),
@@ -139,6 +145,7 @@ def train_common_cathode_mlp(
         "hidden_size": hidden_size,
         "learning_rate": learning_rate,
         "stride": stride,
+        "history_samples": prepared.history_samples,
         "train_samples": int(prepared.train.x.shape[0]),
         "validation_samples": int(prepared.validation.x.shape[0]),
         "test_samples": int(prepared.test.x.shape[0]),
@@ -158,19 +165,26 @@ def train_common_cathode_mlp(
     return descriptor_path, weights_path, report_path
 
 
-def prepare_common_cathode_dataset(manifest_path: Path, *, stride: int = 16) -> PreparedDataset:
+def prepare_common_cathode_dataset(
+    manifest_path: Path,
+    *,
+    stride: int = 16,
+    history_samples: int = 1,
+) -> PreparedDataset:
+    if history_samples < 1:
+        raise ValueError("history_samples must be at least 1")
     manifest = _read_json(manifest_path)
     dataset_path = _resolve_manifest_path(manifest_path, _artifact_path(manifest, "output"))
     npz = np.load(dataset_path)
     train_ids = list(manifest["splits"]["train"])
     validation_ids = list(manifest["splits"]["validation"])
     test_ids = list(manifest["splits"]["test"])
-    train_raw = _collect_split(npz, manifest, train_ids, stride=stride)
-    validation_raw = _collect_split(npz, manifest, validation_ids, stride=stride)
-    test_raw = _collect_split(npz, manifest, test_ids, stride=stride)
+    train_raw = _collect_split(npz, manifest, train_ids, stride=stride, history_samples=history_samples)
+    validation_raw = _collect_split(npz, manifest, validation_ids, stride=stride, history_samples=history_samples)
+    test_raw = _collect_split(npz, manifest, test_ids, stride=stride, history_samples=history_samples)
 
-    input_mean = float(np.mean(train_raw.x))
-    input_std = float(np.std(train_raw.x))
+    input_mean = float(np.mean(train_raw.x[:, :1]))
+    input_std = float(np.std(train_raw.x[:, :1]))
     output_mean = float(np.mean(train_raw.y))
     output_std = float(np.std(train_raw.y))
     input_std = input_std if input_std > 1.0e-12 else 1.0
@@ -185,6 +199,7 @@ def prepare_common_cathode_dataset(manifest_path: Path, *, stride: int = 16) -> 
         output_mean=output_mean,
         output_std=output_std,
         sample_rate_hz=int(manifest["sample_rate_hz"]),
+        history_samples=history_samples,
         train_ids=train_ids,
         validation_ids=validation_ids,
         test_ids=test_ids,
@@ -219,7 +234,9 @@ def infer_artifact_numpy(descriptor_path: Path, input_v: np.ndarray) -> np.ndarr
     weights_path = _resolve_manifest_path(descriptor_path, descriptor["weights"]["path"])
     layers = read_mlp_weights(weights_path, descriptor)
     norm = descriptor["io"]["normalization"]
-    x = ((input_v.reshape((-1, 1)) - float(norm["input_mean"])) / float(norm["input_std"])).astype(np.float32)
+    history_samples = _descriptor_input_features(descriptor)
+    x = _causal_history_matrix(input_v.astype(np.float32), history_samples)
+    x = ((x - float(norm["input_mean"])) / float(norm["input_std"])).astype(np.float32)
     normalized = infer_mlp_numpy(x, layers)
     return normalized.reshape((-1,)) * float(norm["output_std"]) + float(norm["output_mean"])
 
@@ -279,9 +296,9 @@ def evaluate_neural_cell_against_spice(
         reference_v = npz[prefix + "plate_ac_v"]
         settle_time_s = float(stimulus.get("parameters", {}).get("settle_time_s", 0.0))
         mask = time_s >= settle_time_s
-        case_input = input_v[mask][::stride].astype(np.float32)
+        full_case_input = input_v[mask].astype(np.float32)
         case_reference = reference_v[mask][::stride].astype(np.float32)
-        case_prediction = infer_artifact_numpy(descriptor_path, case_input).astype(np.float32)
+        case_prediction = infer_artifact_numpy(descriptor_path, full_case_input).astype(np.float32)[::stride]
         rows.append(
             _evaluation_row(
                 stimulus_id=stimulus_id,
@@ -343,9 +360,9 @@ def build_mlp_descriptor(
         "architecture": {
             "family": "mlp",
             "activation": "tanh",
-            "receptive_field_samples": 0,
+            "receptive_field_samples": prepared.history_samples - 1,
             "layers": [
-                {"type": "dense", "in_features": 1, "out_features": hidden_size},
+                {"type": "dense", "in_features": prepared.history_samples, "out_features": hidden_size},
                 {"type": "dense", "in_features": hidden_size, "out_features": hidden_size},
                 {"type": "dense", "in_features": hidden_size, "out_features": 1},
             ],
@@ -368,8 +385,8 @@ def build_mlp_descriptor(
         "controls": [],
         "state": {
             "samples": 0,
-            "floats": 0,
-            "description": "Static MLP smoke-test cell. No streaming memory.",
+            "floats": prepared.history_samples - 1,
+            "description": "Causal MLP with input-voltage history." if prepared.history_samples > 1 else "Static MLP smoke-test cell. No streaming memory.",
         },
         "weights": {
             "format": "greybound-bin-v1",
@@ -378,7 +395,7 @@ def build_mlp_descriptor(
             "dtype": "f32",
             "endianness": "little",
             "layout": [
-                {"name": "dense0", "in_features": 1, "out_features": hidden_size},
+                {"name": "dense0", "in_features": prepared.history_samples, "out_features": hidden_size},
                 {"name": "dense1", "in_features": hidden_size, "out_features": hidden_size},
                 {"name": "dense2", "in_features": hidden_size, "out_features": 1},
             ],
@@ -395,7 +412,9 @@ def build_mlp_descriptor(
             "metrics": metrics,
             "report": relative_or_absolute(output_dir / "training-report.md", repo_root),
             "limitations": [
-                "Static input-to-plate-ac MLP; no state or capacitance memory.",
+                "Causal input-history MLP; no learned recurrent state or explicit capacitance state."
+                if prepared.history_samples > 1
+                else "Static input-to-plate-ac MLP; no state or capacitance memory.",
                 "Trained on decimated SPICE samples for a smoke test.",
                 "No source/load impedance sweep, B+ perturbation, component tolerance sweep, or real DI.",
                 "Not approved for the live audio engine.",
@@ -406,7 +425,7 @@ def build_mlp_descriptor(
             "max_block_size": 1,
             "allocates_on_audio_thread": False,
             "denormal_safe": False,
-            "cpu_notes": "Three dense layers. Python/Rust readers and experimental Nox30 integration exist; not approved for default live use.",
+            "cpu_notes": "Three dense layers plus a fixed input-history buffer. Python/Rust readers and experimental Nox30 integration exist; not approved for default live use.",
             "safety_clamps": {
                 "input_v_min": _stimulus_min(manifest, "amplitude_v", default=-0.12),
                 "input_v_max": _stimulus_max(manifest, "amplitude_v", default=0.12),
@@ -441,6 +460,7 @@ training/export/equivalence path.
 - Train samples after stride: `{metrics['train_samples']}`
 - Validation samples after stride: `{metrics['validation_samples']}`
 - Test samples after stride: `{metrics['test_samples']}`
+- Causal input history samples: `{metrics['history_samples']}`
 
 ## Metrics
 
@@ -461,7 +481,7 @@ training/export/equivalence path.
 
 ## Limitations
 
-- Static MLP only: no state, no capacitance memory, no bias history.
+- {'Causal input-history MLP only: no learned recurrent state or explicit capacitance model.' if int(metrics['history_samples']) > 1 else 'Static MLP only: no state, no capacitance memory, no bias history.'}
 - Trained on decimated samples.
 - The dataset is still a small SPICE corpus.
 - Rust inference and experimental Nox30 integration exist; not approved for default live use.
@@ -499,6 +519,12 @@ def write_evaluation_report(
     )
     aggregate = _aggregate_rows(rows)
     history_section = _render_history_probe_section(history_rows)
+    input_features = _descriptor_input_features(descriptor)
+    model_note = (
+        "This artifact uses a causal input-history MLP. Large residual error after adding short history means the missing behavior likely needs explicit state, a longer causal model, or fixture changes rather than another static transfer curve."
+        if input_features > 1
+        else "Large relative error on hot sine or two-tone cases means the static MLP is not yet capturing the nonlinear shape needed for a tube-cell replacement. Large relative error on the bias recovery stress probe is a domain-boundary signal: first check high-amplitude coverage, then check whether residual error remains after coverage is added."
+    )
     path.write_text(
         f"""# Neural Cell SPICE Evaluation: {descriptor.get('artifact_id', 'unknown')}
 
@@ -538,18 +564,21 @@ live audio use.
 ## Interpretation
 
 Compare RMSE against the zero baseline. A useful model should beat the baseline
-on held-out stimuli, not only on training stimuli. Large relative error on hot
-sine or two-tone cases means the static MLP is not yet capturing the nonlinear
-shape needed for a tube-cell replacement. Large relative error on the bias
-recovery stress probe is a domain-boundary signal: first check high-amplitude
-coverage, then check whether residual error remains after coverage is added.
+on held-out stimuli, not only on training stimuli. {model_note}
 {history_section}
 """,
         encoding="utf-8",
     )
 
 
-def _collect_split(npz: Any, manifest: dict[str, Any], stimulus_ids: list[str], *, stride: int) -> PreparedSplit:
+def _collect_split(
+    npz: Any,
+    manifest: dict[str, Any],
+    stimulus_ids: list[str],
+    *,
+    stride: int,
+    history_samples: int,
+) -> PreparedSplit:
     xs = []
     ys = []
     by_id = {item["id"]: item for item in manifest["stimuli"]}
@@ -561,7 +590,7 @@ def _collect_split(npz: Any, manifest: dict[str, Any], stimulus_ids: list[str], 
         plate_ac_v = npz[prefix + "plate_ac_v"]
         settle_time_s = float(stimulus.get("parameters", {}).get("settle_time_s", 0.0))
         mask = time_s >= settle_time_s
-        xs.append(input_v[mask][::stride].reshape((-1, 1)))
+        xs.append(_causal_history_matrix(input_v[mask].astype(np.float32), history_samples)[::stride])
         ys.append(plate_ac_v[mask][::stride].reshape((-1, 1)))
     if not xs:
         return PreparedSplit(x=np.zeros((0, 1), dtype=np.float32), y=np.zeros((0, 1), dtype=np.float32))
@@ -720,6 +749,26 @@ def _normalize_split(
         x=((split.x - input_mean) / input_std).astype(np.float32),
         y=((split.y - output_mean) / output_std).astype(np.float32),
     )
+
+
+def _causal_history_matrix(values: np.ndarray, history_samples: int) -> np.ndarray:
+    values = values.reshape((-1,)).astype(np.float32)
+    if history_samples < 1:
+        raise ValueError("history_samples must be at least 1")
+    matrix = np.zeros((values.shape[0], history_samples), dtype=np.float32)
+    for offset in range(history_samples):
+        if offset == 0:
+            matrix[:, offset] = values
+        else:
+            matrix[offset:, offset] = values[:-offset]
+    return matrix
+
+
+def _descriptor_input_features(descriptor: dict[str, Any]) -> int:
+    layout = descriptor.get("weights", {}).get("layout", [])
+    if not layout:
+        return 1
+    return max(1, int(layout[0].get("in_features", 1)))
 
 
 def _extract_mlp_layers(model: Any) -> list[dict[str, np.ndarray]]:

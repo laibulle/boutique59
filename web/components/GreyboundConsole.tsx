@@ -268,6 +268,21 @@ export function GreyboundConsole() {
             <Switch label="Speaker IR" checked={runtime.speakerIr} onChange={(speakerIr) => setRuntime({ ...runtime, speakerIr })} />
           </div>
 
+          <label className="fieldLabel" htmlFor="first-stage-select">First stage</label>
+          <select
+            id="first-stage-select"
+            value={runtime.firstStageModel}
+            onChange={(event) =>
+              setRuntime({
+                ...runtime,
+                firstStageModel: event.target.value as RuntimeConfig["firstStageModel"],
+              })
+            }
+          >
+            <option value="analytic">analytic</option>
+            <option value="graybox">graybox</option>
+          </select>
+
           <AssetSelect
             label="TONE3000 input"
             value={runtime.inputSourceUrl}

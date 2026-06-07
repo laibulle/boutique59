@@ -52,6 +52,10 @@ export function applyNox30SpeakerIr(engine: GreyboundNox30, enabled: boolean) {
   engine.set_speaker_enabled(enabled);
 }
 
+export function applyNox30FirstStageModel(engine: GreyboundNox30, model: "analytic" | "graybox") {
+  engine.setFirstStageModel(model);
+}
+
 function rigToJson(rig: RigPreset) {
   const preAmp = rig.pedals.filter((pedal) => pedal.section === "pre");
   const fxLoop = rig.pedals.filter((pedal) => pedal.section === "fx");

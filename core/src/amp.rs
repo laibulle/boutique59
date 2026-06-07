@@ -65,6 +65,10 @@ pub fn configure_nox30_first_stage_neural(descriptor_path: Option<PathBuf>, mode
     models::configure_nox30_first_stage_neural(descriptor_path, mode);
 }
 
+pub fn configure_nox30_first_stage_graybox(config_path: Option<PathBuf>, mode: NeuralCellMode) {
+    models::configure_nox30_first_stage_graybox(config_path, mode);
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct ComponentBoundary {
     pub id: &'static str,

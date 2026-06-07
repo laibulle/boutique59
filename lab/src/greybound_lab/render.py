@@ -27,9 +27,12 @@ def render_rig(
     monitor_enabled: bool = False,
     monitor_log: Path | None = None,
     neural_cell: tuple[str, Path] | None = None,
+    graybox_cell: tuple[str, Path] | None = None,
     neural_cell_mode: str = "shadow",
     disable_neural_cell: bool = False,
 ) -> None:
+    if neural_cell is not None and graybox_cell is not None:
+        raise ValueError("neural_cell and graybox_cell are mutually exclusive")
     output_wav.parent.mkdir(parents=True, exist_ok=True)
     metadata.parent.mkdir(parents=True, exist_ok=True)
 
@@ -63,6 +66,10 @@ def render_rig(
         component, descriptor = neural_cell
         command.extend(["--neural-cell", f"{component}={descriptor}"])
         command.extend(["--neural-cell-mode", neural_cell_mode])
+    if graybox_cell is not None:
+        component, config = graybox_cell
+        command.extend(["--graybox-cell", f"{component}={config}"])
+        command.extend(["--neural-cell-mode", neural_cell_mode])
     if disable_neural_cell:
         command.append("--disable-neural-cell")
 
@@ -94,6 +101,13 @@ def render_rig(
                 "mode": neural_cell_mode,
             }
             if neural_cell
+            else None,
+            "graybox_cell": {
+                "component": graybox_cell[0],
+                "config": relative_or_absolute(graybox_cell[1], repo_root),
+                "mode": neural_cell_mode,
+            }
+            if graybox_cell
             else None,
             "disable_neural_cell": disable_neural_cell,
         },

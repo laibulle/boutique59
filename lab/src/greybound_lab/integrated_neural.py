@@ -47,9 +47,10 @@ def evaluate_integrated_neural_cell(
     binary: Path,
     rig: Path,
     input_wav: Path,
-    descriptor: Path,
     output_dir: Path,
     report: Path,
+    descriptor: Path | None = None,
+    graybox_config: Path | None = None,
     component: str = "nox30.first_stage",
     render_seconds: float = 20.0,
     sample_rate_hz: int = 48_000,
@@ -61,6 +62,10 @@ def evaluate_integrated_neural_cell(
     segments: Path | None = None,
     reference_wav: Path | None = None,
 ) -> IntegratedNeuralReport:
+    if descriptor is None and graybox_config is None:
+        raise ValueError("descriptor or graybox_config is required")
+    if descriptor is not None and graybox_config is not None:
+        raise ValueError("descriptor and graybox_config are mutually exclusive")
     output_dir.mkdir(parents=True, exist_ok=True)
     analytic_wav = output_dir / "analytic.wav"
     shadow_wav = output_dir / "shadow.wav"
@@ -102,7 +107,8 @@ def evaluate_integrated_neural_cell(
         ir_wav=ir_wav,
         monitor_enabled=True,
         monitor_log=shadow_log,
-        neural_cell=(component, descriptor),
+        neural_cell=(component, descriptor) if descriptor is not None else None,
+        graybox_cell=(component, graybox_config) if graybox_config is not None else None,
         neural_cell_mode="shadow",
     )
     render_rig(
@@ -119,7 +125,8 @@ def evaluate_integrated_neural_cell(
         output_gain_db=output_gain_db,
         ir_enabled=ir_enabled,
         ir_wav=ir_wav,
-        neural_cell=(component, descriptor),
+        neural_cell=(component, descriptor) if descriptor is not None else None,
+        graybox_cell=(component, graybox_config) if graybox_config is not None else None,
         neural_cell_mode="replace",
     )
 
@@ -188,7 +195,16 @@ def evaluate_integrated_neural_cell(
         analytic_vs_reference_program=analytic_vs_reference_program,
         replace_vs_reference_program=replace_vs_reference_program,
     )
-    write_integrated_neural_report(report, result, component, descriptor, rig, input_wav, reference_wav)
+    write_integrated_neural_report(
+        report,
+        result,
+        component,
+        descriptor,
+        graybox_config,
+        rig,
+        input_wav,
+        reference_wav,
+    )
     return result
 
 
@@ -211,7 +227,8 @@ def write_integrated_neural_report(
     path: Path,
     result: IntegratedNeuralReport,
     component: str,
-    descriptor: Path,
+    descriptor: Path | None,
+    graybox_config: Path | None,
     rig: Path,
     input_wav: Path,
     reference_wav: Path | None,
@@ -224,7 +241,8 @@ def write_integrated_neural_report(
 ## Inputs
 
 - Component: `{component}`
-- Descriptor: `{descriptor}`
+- Descriptor: `{descriptor if descriptor else "not provided"}`
+- Gray-box config: `{graybox_config if graybox_config else "not provided"}`
 - Rig: `{rig}`
 - Input WAV: `{input_wav}`
 - Reference WAV: `{reference_wav if reference_wav else "not provided"}`

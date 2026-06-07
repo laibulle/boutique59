@@ -7,8 +7,8 @@ pub mod pedal;
 pub mod rig;
 
 pub use amp::{
-    configure_nox30_first_stage_neural, AmpControls, ComponentBoundary, NeuralCellMode,
-    Nox30OperatingPoint, NOX30_COMPONENT_BOUNDARIES,
+    configure_nox30_first_stage_graybox, configure_nox30_first_stage_neural, AmpControls,
+    ComponentBoundary, NeuralCellMode, Nox30OperatingPoint, NOX30_COMPONENT_BOUNDARIES,
 };
 pub use chain::{
     amp_model_descriptor, AmpModelDescriptor, ControlDescriptor, ControlKind, DeviceConfig,

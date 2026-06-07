@@ -71,6 +71,37 @@ def test_infer_artifact_numpy_applies_normalization(tmp_path: Path) -> None:
     np.testing.assert_allclose(output, np.array([10.0, 14.0], dtype=np.float32), rtol=1e-6)
 
 
+def test_infer_artifact_numpy_uses_causal_history(tmp_path: Path) -> None:
+    weights_path = tmp_path / "weights.greybound.bin"
+    descriptor_path = tmp_path / "model.greybound.json"
+    layers = [
+        {
+            "weight": np.array([[1.0, 2.0]], dtype=np.float32),
+            "bias": np.array([0.0], dtype=np.float32),
+        }
+    ]
+    write_mlp_weights(weights_path, layers)
+    descriptor = {
+        "io": {
+            "normalization": {
+                "input_mean": 0.0,
+                "input_std": 1.0,
+                "output_mean": 0.0,
+                "output_std": 1.0,
+            }
+        },
+        "weights": {
+            "path": "weights.greybound.bin",
+            "layout": [{"in_features": 2, "out_features": 1}],
+        },
+    }
+    descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    output = infer_artifact_numpy(descriptor_path, np.array([0.5, 0.25], dtype=np.float32))
+
+    np.testing.assert_allclose(output, np.array([0.5, 1.25], dtype=np.float32), rtol=1e-6)
+
+
 def test_export_neural_cell_vectors(tmp_path: Path) -> None:
     weights_path = tmp_path / "weights.greybound.bin"
     descriptor_path = tmp_path / "model.greybound.json"
@@ -131,6 +162,7 @@ def test_build_mlp_descriptor_uses_output_directory_as_artifact_id(tmp_path: Pat
         output_mean=0.0,
         output_std=1.0,
         sample_rate_hz=48000,
+        history_samples=1,
         train_ids=[],
         validation_ids=[],
         test_ids=[],

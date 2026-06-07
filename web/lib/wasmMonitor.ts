@@ -1,6 +1,6 @@
 import type { GreyboundNox30 } from "./greybound-wasm/greybound_wasm";
 import type { AmpControlId, RigPreset, RuntimeConfig } from "./rigs";
-import { createNox30WasmEngine, applyNox30RigControls, applyNox30SpeakerIr } from "./wasmEngine";
+import { createNox30WasmEngine, applyNox30FirstStageModel, applyNox30RigControls, applyNox30SpeakerIr } from "./wasmEngine";
 import type { MonitorStats } from "./simulation";
 
 type AmpValues = Record<AmpControlId, number>;
@@ -98,6 +98,7 @@ export function renderWasmAudioBlock(
   }
 
   applyNox30RigControls(state.engine, rig, Math.pow(10, runtime.outputDb / 20));
+  applyNox30FirstStageModel(state.engine, runtime.firstStageModel);
   applyNox30SpeakerIr(state.engine, runtime.speakerIr);
   const output = state.engine.process_block(inputBlock);
   return {

@@ -287,6 +287,53 @@ Milestone 4: dynamic model trial
   behavior.
 - Compare against the MLP rather than assuming the dynamic model is better.
 
+Current status: first intermediate trial implemented. The MLP artifact format,
+Python evaluator, and Rust runtime now support a fixed causal input-history
+buffer, so `weights.layout[0].in_features > 1` means the runtime evaluates
+`[x[n], x[n-1], ...]` without audio-thread allocation. A local
+`common-cathode-12ax7-mlp-v4-history` trial with 8 input-history samples passed
+Python/Rust equivalence, but its SPICE score regressed from the current static
+model (`49.555 mV` weighted RMSE) to `54.698 mV`. This does not justify full
+Nox30/NAM integration. The next model-quality step should be explicit state or
+a small causal TCN, not more short input-history taps on the same MLP.
+
+Follow-up: the first explicit-state gray-box probe is now implemented through
+`make lab-fit-graybox-cell`. It fits a tiny differentiable structure with fast
+and slow states plus a bounded static nonlinearity, then writes a local
+source-ignored report. A 120-epoch local run,
+`common-cathode-12ax7-graybox-state-v0`, reached `35.207 mV` weighted RMSE on
+the same SPICE evaluation set. This beats both the current static MLP and the
+short-history MLP, so the next implementation step should be to map this
+structure into an inspectable Rust experimental cell and compare it against the
+existing analytic common-cathode report before doing full Nox30/NAM integration.
+That Rust mapping is now implemented as `CommonCathodeGrayboxStateCell` and
+evaluated through `make lab-evaluate-graybox-cell-rust`. The Rust evaluation
+matches the Python report at `35.207 mV` weighted RMSE, `22.044 mV` weighted
+MAE, and `1.88%` weighted relative RMSE at stride 16. With the analytic
+baseline rerun at the same stride, the current analytic cell is `95.318 mV`
+weighted RMSE (`90.418 mV` after gain/latency alignment). This promotes the
+gray-box cell from a Python-only probe to the leading cell-level candidate, but
+not yet to an audio-chain replacement.
+
+Nox30 integration is available behind an explicit gray-box override:
+`--graybox-cell nox30.first_stage=PATH` or
+`make lab-evaluate-integrated-graybox-cell`. A first local render using
+`common-cathode-12ax7-graybox-state-v0` changed the full Nox30 chain materially
+(`-10.74 dB` replace-vs-analytic null residual). Against the NAM reference, it
+slightly improved program-material score from `0.4956` to `0.4929` and
+log-spectral distance from `10.87 dB` to `10.57 dB`, while slightly worsening
+the null residual from `-5.23 dB` to `-5.13 dB`. This is enough to keep it as an
+active integration probe, but not enough to promote it to the default Nox30
+first stage.
+
+Integration readiness: the validated `v0` parameters are now available as the
+built-in gray-box config id `accepted`, so CLI/lab/web builds do not depend on a
+local ignored model file. CLI usage is
+`--graybox-cell nox30.first_stage=accepted`; the web WASM monitor exposes the
+same candidate through its `First stage` selector. This makes the candidate
+demoable and releasable as an explicit option while preserving the analytic
+first stage as the default.
+
 Milestone 5: export and Rust equivalence
 
 - Export `model.greybound.json` and `weights.greybound.bin`.
@@ -312,15 +359,15 @@ milestone.
 
 The Rust analytic common-cathode baseline is evaluated through
 `make lab-evaluate-analytic-common-cathode`. The current analytic stage is
-stronger than the first MLP on the same dataset, so neural runtime integration is
-not justified yet. A diagnostic gain/latency correction only improves the
-analytic baseline from about `80 mV` weighted RMSE to about `70 mV`, which means
-the residual is not mostly a calibration offset. The next useful investigation is
-the model mismatch itself: transfer shape, bias dynamics, discretization, and
-fixture equivalence. The evaluator now includes harmonic and IMD shape sections;
-the first run shows small THD/IMD deltas, so the likely missing information is
-dynamic state or exact fixture behavior rather than a simple static nonlinear
-curve.
+stronger than the first MLP but weaker than the explicit-state gray-box cell on
+the same dataset. A diagnostic gain/latency correction improves the current
+analytic baseline from `95.318 mV` weighted RMSE to `90.418 mV` at stride 16,
+which means the residual is not mostly a calibration offset. The next useful
+investigation is the model mismatch itself: transfer shape, bias dynamics,
+discretization, and fixture equivalence. The evaluator now includes harmonic and
+IMD shape sections; the first run shows small THD/IMD deltas, so the likely
+missing information is dynamic state or exact fixture behavior rather than a
+simple static nonlinear curve.
 
 Milestone 6: integration check
 

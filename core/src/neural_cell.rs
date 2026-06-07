@@ -8,11 +8,13 @@ use std::path::{Path, PathBuf};
 pub struct ExperimentalNeuralCell {
     layers: Vec<DenseLayer>,
     normalization: Normalization,
+    input_features: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct NeuralCellRuntime {
     cell: ExperimentalNeuralCell,
+    input_history: Vec<f32>,
     scratch_a: Vec<f32>,
     scratch_b: Vec<f32>,
 }
@@ -30,6 +32,31 @@ pub struct CommonCathodeNeuralAdapter {
     params: CommonCathodeNeuralAdapterParams,
     last_plate_ac_v: f32,
     last_output_v: f32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct CommonCathodeGrayboxStateParams {
+    pub drive_gain: f32,
+    pub shape: f32,
+    pub fast_alpha: f32,
+    pub slow_alpha: f32,
+    pub drive_bias: f32,
+    pub linear: f32,
+    pub saturation: f32,
+    pub cubic: f32,
+    pub fast_feedback: f32,
+    pub slow_feedback: f32,
+    pub fast_mix: f32,
+    pub slow_mix: f32,
+    pub output_gain: f32,
+    pub output_bias: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommonCathodeGrayboxStateCell {
+    params: CommonCathodeGrayboxStateParams,
+    fast_state: f32,
+    slow_state: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -101,8 +128,8 @@ impl ExperimentalNeuralCell {
     }
 
     pub fn process_sample(&self, input_v: f32) -> f32 {
-        let mut values =
-            vec![(input_v - self.normalization.input_mean) / self.normalization.input_std];
+        let mut values = vec![0.0; self.input_features];
+        values[0] = (input_v - self.normalization.input_mean) / self.normalization.input_std;
         for (index, layer) in self.layers.iter().enumerate() {
             let mut next = vec![0.0; layer.out_features];
             for out_index in 0..layer.out_features {
@@ -138,8 +165,9 @@ impl ExperimentalNeuralCell {
                 output_v.len()
             );
         }
+        let mut runtime = self.prepare_runtime();
         for (input, output) in input_v.iter().zip(output_v.iter_mut()) {
-            *output = self.process_sample(*input);
+            *output = runtime.process_sample(*input);
         }
         Ok(())
     }
@@ -177,9 +205,9 @@ impl ExperimentalNeuralCell {
         if layers.is_empty() {
             bail!("neural-cell has no layers");
         }
-        if layers[0].in_features != 1 || layers.last().is_some_and(|layer| layer.out_features != 1)
+        if layers[0].in_features == 0 || layers.last().is_some_and(|layer| layer.out_features != 1)
         {
-            bail!("only scalar input/output neural cells are supported");
+            bail!("only causal scalar-output neural cells are supported");
         }
         let normalization = Normalization {
             input_mean: descriptor.io.normalization.input_mean,
@@ -188,6 +216,7 @@ impl ExperimentalNeuralCell {
             output_std: nonzero_std(descriptor.io.normalization.output_std, "output_std")?,
         };
         Ok(Self {
+            input_features: layers[0].in_features,
             layers,
             normalization,
         })
@@ -205,6 +234,7 @@ impl NeuralCellRuntime {
             .max(1);
         Self {
             cell,
+            input_history: vec![0.0; max_width],
             scratch_a: vec![0.0; max_width],
             scratch_b: vec![0.0; max_width],
         }
@@ -212,9 +242,17 @@ impl NeuralCellRuntime {
 
     #[inline]
     pub fn process_sample(&mut self, input_v: f32) -> f32 {
-        self.scratch_a[0] =
-            (input_v - self.cell.normalization.input_mean) / self.cell.normalization.input_std;
-        let mut input_len = 1;
+        let input_features = self.cell.input_features;
+        if input_features > 1 {
+            self.input_history.copy_within(0..input_features - 1, 1);
+        }
+        self.input_history[0] = input_v;
+        for index in 0..input_features {
+            self.scratch_a[index] = (self.input_history[index]
+                - self.cell.normalization.input_mean)
+                / self.cell.normalization.input_std;
+        }
+        let mut input_len = input_features;
         for (index, layer) in self.cell.layers.iter().enumerate() {
             debug_assert_eq!(input_len, layer.in_features);
             for out_index in 0..layer.out_features {
@@ -299,6 +337,130 @@ impl CommonCathodeNeuralAdapter {
 
     pub fn last_output_v(&self) -> f32 {
         self.last_output_v
+    }
+}
+
+impl CommonCathodeGrayboxStateCell {
+    pub fn new(params: CommonCathodeGrayboxStateParams) -> Result<Self> {
+        params.validate()?;
+        Ok(Self {
+            params,
+            fast_state: 0.0,
+            slow_state: 0.0,
+        })
+    }
+
+    pub fn from_config_path(path: impl AsRef<Path>) -> Result<Self> {
+        #[derive(Deserialize)]
+        struct Config {
+            parameters: CommonCathodeGrayboxStateParams,
+        }
+
+        let path = path.as_ref();
+        if let Some(name) = path.to_str() {
+            if matches!(
+                name,
+                "accepted" | "accepted-live" | "builtin" | "common-cathode-12ax7-graybox-state-v0"
+            ) {
+                return Self::new(CommonCathodeGrayboxStateParams::common_cathode_12ax7_v0());
+            }
+        }
+        let text = fs::read_to_string(path)
+            .with_context(|| format!("failed to read gray-box config {}", path.display()))?;
+        let config: Config = json5::from_str(&text)
+            .with_context(|| format!("failed to parse gray-box config {}", path.display()))?;
+        Self::new(config.parameters)
+    }
+
+    pub fn reset(&mut self) {
+        self.fast_state = 0.0;
+        self.slow_state = 0.0;
+    }
+
+    #[inline]
+    pub fn process_sample(&mut self, input_v: f32) -> f32 {
+        let drive = self.params.drive_gain * input_v
+            - self.params.fast_feedback * self.fast_state
+            - self.params.slow_feedback * self.slow_state
+            + self.params.drive_bias;
+        let instant = self.params.linear * drive
+            + self.params.saturation * (self.params.shape * drive).tanh()
+            + self.params.cubic * drive * drive * drive;
+        self.fast_state += self.params.fast_alpha * (instant - self.fast_state);
+        self.slow_state += self.params.slow_alpha * (self.fast_state - self.slow_state);
+        self.params.output_gain
+            * (instant
+                + self.params.fast_mix * self.fast_state
+                + self.params.slow_mix * self.slow_state)
+            + self.params.output_bias
+    }
+
+    pub fn process_block(&mut self, input_v: &[f32], output_v: &mut [f32]) -> Result<()> {
+        if input_v.len() != output_v.len() {
+            bail!(
+                "common-cathode gray-box input/output length mismatch: {} != {}",
+                input_v.len(),
+                output_v.len()
+            );
+        }
+        for (input, output) in input_v.iter().zip(output_v.iter_mut()) {
+            *output = self.process_sample(*input);
+        }
+        Ok(())
+    }
+
+    pub fn params(&self) -> CommonCathodeGrayboxStateParams {
+        self.params
+    }
+}
+
+impl CommonCathodeGrayboxStateParams {
+    pub fn common_cathode_12ax7_v0() -> Self {
+        Self {
+            drive_gain: 2.1871016,
+            shape: 1.2695892,
+            fast_alpha: 0.13404444,
+            slow_alpha: 0.0025320612,
+            drive_bias: -0.0008933089,
+            linear: -5.0462627,
+            saturation: -1.0460438,
+            cubic: -0.23338625,
+            fast_feedback: -0.008940127,
+            slow_feedback: -0.05190596,
+            fast_mix: 0.05544361,
+            slow_mix: -0.042792317,
+            output_gain: 1.0831846,
+            output_bias: -0.008414772,
+        }
+    }
+
+    fn validate(&self) -> Result<()> {
+        let values = [
+            self.drive_gain,
+            self.shape,
+            self.fast_alpha,
+            self.slow_alpha,
+            self.drive_bias,
+            self.linear,
+            self.saturation,
+            self.cubic,
+            self.fast_feedback,
+            self.slow_feedback,
+            self.fast_mix,
+            self.slow_mix,
+            self.output_gain,
+            self.output_bias,
+        ];
+        if !values.iter().all(|value| value.is_finite()) {
+            bail!("gray-box parameters must be finite");
+        }
+        if self.shape <= 0.0 {
+            bail!("gray-box shape must be positive");
+        }
+        if !(0.0..=1.0).contains(&self.fast_alpha) || !(0.0..=1.0).contains(&self.slow_alpha) {
+            bail!("gray-box state coefficients must be in [0, 1]");
+        }
+        Ok(())
     }
 }
 
@@ -464,6 +626,49 @@ mod tests {
     }
 
     #[test]
+    fn runtime_uses_causal_input_history() {
+        let dir = test_dir("runtime_uses_causal_input_history");
+        fs::create_dir_all(&dir).unwrap();
+        write_test_weights(
+            &dir.join("weights.greybound.bin"),
+            &[(&[1.0_f32, 2.0_f32][..], &[0.0_f32][..])],
+        );
+        fs::write(
+            dir.join("model.greybound.json"),
+            r#"{
+              architecture: { family: "mlp", activation: "tanh" },
+              io: {
+                normalization: {
+                  input_mean: 0.0,
+                  input_std: 1.0,
+                  output_mean: 0.0,
+                  output_std: 1.0,
+                },
+              },
+              weights: {
+                format: "greybound-bin-v1",
+                path: "weights.greybound.bin",
+                dtype: "f32",
+                endianness: "little",
+                layout: [{ in_features: 2, out_features: 1 }],
+              },
+            }"#,
+        )
+        .unwrap();
+
+        let cell =
+            ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
+        let mut runtime = cell.prepare_runtime();
+
+        assert_eq!(runtime.process_sample(0.5), 0.5);
+        assert_eq!(runtime.process_sample(0.25), 1.25);
+        let mut output = [0.0, 0.0];
+        cell.process_block(&[0.5, 0.25], &mut output).unwrap();
+        assert_eq!(output, [0.5, 1.25]);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn common_cathode_adapter_maps_plate_ac_to_stage_output() {
         let dir = test_dir("common_cathode_adapter_maps_plate_ac_to_stage_output");
         fs::create_dir_all(&dir).unwrap();
@@ -516,6 +721,69 @@ mod tests {
             .unwrap();
         assert_eq!(block_output, [9.875, 8.375]);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn graybox_state_cell_processes_stateful_sequence() {
+        let mut cell = CommonCathodeGrayboxStateCell::new(CommonCathodeGrayboxStateParams {
+            drive_gain: 1.0,
+            shape: 1.0,
+            fast_alpha: 0.5,
+            slow_alpha: 0.25,
+            drive_bias: 0.0,
+            linear: 1.0,
+            saturation: 0.0,
+            cubic: 0.0,
+            fast_feedback: 0.0,
+            slow_feedback: 0.0,
+            fast_mix: 1.0,
+            slow_mix: 1.0,
+            output_gain: 1.0,
+            output_bias: 0.0,
+        })
+        .unwrap();
+
+        let first = cell.process_sample(1.0);
+        let second = cell.process_sample(0.0);
+
+        assert!((first - 1.625).abs() < 1.0e-6);
+        assert!((second - 0.40625).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn graybox_state_cell_rejects_invalid_coefficients() {
+        let error = CommonCathodeGrayboxStateCell::new(CommonCathodeGrayboxStateParams {
+            drive_gain: 1.0,
+            shape: 1.0,
+            fast_alpha: 1.2,
+            slow_alpha: 0.25,
+            drive_bias: 0.0,
+            linear: 1.0,
+            saturation: 0.0,
+            cubic: 0.0,
+            fast_feedback: 0.0,
+            slow_feedback: 0.0,
+            fast_mix: 0.0,
+            slow_mix: 0.0,
+            output_gain: 1.0,
+            output_bias: 0.0,
+        })
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("state coefficients"));
+    }
+
+    #[test]
+    fn graybox_state_cell_loads_accepted_builtin() {
+        let mut cell = CommonCathodeGrayboxStateCell::from_config_path("accepted").unwrap();
+        let output = cell.process_sample(0.01);
+
+        assert!(output.is_finite());
+        assert_eq!(
+            cell.params().drive_gain,
+            CommonCathodeGrayboxStateParams::common_cathode_12ax7_v0().drive_gain
+        );
     }
 
     #[test]

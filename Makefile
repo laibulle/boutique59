@@ -1,6 +1,6 @@
-#DEVICE ?= Scarlett 18i8 USB
+DEVICE ?= Scarlett 18i8 USB
 #DEVICE ?= Écouteurs externes
-DEVICE ?= Haut-parleurs MacBook Air
+#DEVICE ?= Haut-parleurs MacBook Air
 #DEVICE ?= AirPods Pro de Guillaume
 #DEVICE ?= WH-1000XM5
 INPUT_CHANNEL ?= 1
@@ -43,11 +43,13 @@ NEURAL_EPOCHS ?= 1200
 NEURAL_HIDDEN_SIZE ?= 32
 NEURAL_LEARNING_RATE ?= 0.0005
 NEURAL_STRIDE ?= 8
+NEURAL_HISTORY_SAMPLES ?= 1
 NEURAL_DESCRIPTOR ?= $(NEURAL_OUTPUT_DIR)/model.greybound.json
 NEURAL_VECTORS ?= $(NEURAL_OUTPUT_DIR)/equivalence-vectors.json
 NEURAL_EVAL_REPORT ?= $(NEURAL_OUTPUT_DIR)/spice-evaluation.md
 NEURAL_EVAL_SPLIT ?= all
 ANALYTIC_EVAL_REPORT ?= lab/reports/common-cathode-analytic-spice-evaluation.md
+ANALYTIC_STRIDE ?= $(NEURAL_STRIDE)
 INTEGRATED_NEURAL_DIR ?= lab/reports/integrated-neural-first-stage-anchor-current
 INTEGRATED_NEURAL_REPORT ?= lab/reports/integrated-neural-first-stage-anchor-current.md
 INTEGRATED_NEURAL_RIG ?= rigs/nox30-nam-anchor.json5
@@ -58,6 +60,17 @@ NEURAL_BLEND_DIR ?= lab/reports/neural-blend-first-stage-anchor-current
 NEURAL_BLEND_REPORT ?= lab/reports/neural-blend-first-stage-anchor-current.md
 NEURAL_BLEND_METADATA ?= lab/reports/neural-blend-first-stage-anchor-current.run.json
 NEURAL_BLEND_ALPHAS ?= 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1
+GRAYBOX_CELL ?= common-cathode-12ax7-state
+GRAYBOX_OUTPUT_DIR ?= lab/models/common-cathode-12ax7-graybox-state-current
+GRAYBOX_CONFIG ?= accepted
+GRAYBOX_LOCAL_CONFIG ?= $(GRAYBOX_OUTPUT_DIR)/common-cathode-graybox-state.json
+GRAYBOX_EVAL_REPORT ?= $(GRAYBOX_OUTPUT_DIR)/rust-evaluation.md
+GRAYBOX_EPOCHS ?= 220
+GRAYBOX_LEARNING_RATE ?= 0.008
+GRAYBOX_STRIDE ?= 16
+GRAYBOX_MAX_TRAIN_SAMPLES ?= 2048
+INTEGRATED_GRAYBOX_DIR ?= lab/reports/integrated-graybox-first-stage-anchor-current
+INTEGRATED_GRAYBOX_REPORT ?= lab/reports/integrated-graybox-first-stage-anchor-current.md
 WASM_OUT_DIR ?= web/lib/greybound-wasm
 OVERWRITE ?= 0
 VERCEL ?= npx vercel
@@ -175,7 +188,26 @@ lab-train-neural-cell:
 		--epochs "$(NEURAL_EPOCHS)" \
 		--hidden-size "$(NEURAL_HIDDEN_SIZE)" \
 		--learning-rate "$(NEURAL_LEARNING_RATE)" \
-		--stride "$(NEURAL_STRIDE)"
+		--stride "$(NEURAL_STRIDE)" \
+		--history-samples "$(NEURAL_HISTORY_SAMPLES)"
+
+lab-fit-graybox-cell:
+	uv --project lab run --with torch greybound-lab fit-graybox-cell \
+		--cell "$(GRAYBOX_CELL)" \
+		--dataset-manifest "$(NEURAL_DATASET_MANIFEST)" \
+		--output-dir "$(GRAYBOX_OUTPUT_DIR)" \
+		--epochs "$(GRAYBOX_EPOCHS)" \
+		--learning-rate "$(GRAYBOX_LEARNING_RATE)" \
+		--stride "$(GRAYBOX_STRIDE)" \
+		--max-train-samples-per-stimulus "$(GRAYBOX_MAX_TRAIN_SAMPLES)"
+
+lab-evaluate-graybox-cell-rust:
+	cargo run -p greybound --example common_cathode_graybox_eval -- \
+		--manifest "$(NEURAL_DATASET_MANIFEST)" \
+		--config "$(GRAYBOX_CONFIG)" \
+		--report "$(GRAYBOX_EVAL_REPORT)" \
+		--stride "$(GRAYBOX_STRIDE)" \
+		--split "$(NEURAL_EVAL_SPLIT)"
 
 lab-export-neural-cell-vectors:
 	uv --project lab run greybound-lab export-neural-cell-vectors \
@@ -222,6 +254,24 @@ lab-evaluate-integrated-neural-cell: build
 		$(if $(strip $(INTEGRATED_NEURAL_REFERENCE_WAV)),--reference-wav "$(INTEGRATED_NEURAL_REFERENCE_WAV)",) \
 		$(if $(strip $(INTEGRATED_NEURAL_SEGMENTS)),--segments "$(INTEGRATED_NEURAL_SEGMENTS)",)
 
+lab-evaluate-integrated-graybox-cell: build
+	uv --project lab run greybound-lab evaluate-integrated-neural-cell \
+		--graybox-config "$(GRAYBOX_CONFIG)" \
+		--component "nox30.first_stage" \
+		--rig "$(INTEGRATED_NEURAL_RIG)" \
+		--input-wav "$(TEST_INPUT_WAV)" \
+		--binary "$(CLI)" \
+		--output-dir "$(INTEGRATED_GRAYBOX_DIR)" \
+		--report "$(INTEGRATED_GRAYBOX_REPORT)" \
+		--render-seconds "$(RENDER_SECONDS)" \
+		--sample-rate "$(FILE_SAMPLE_RATE)" \
+		--period-size "$(PERIOD_SIZE)" \
+		--input-db "$(INPUT_DB)" \
+		--output-db "$(OUTPUT_DB)" \
+		$(if $(filter 1 true yes on,$(INTEGRATED_NEURAL_IR)),--ir --ir-wav "$(IR_WAV)",) \
+		$(if $(strip $(INTEGRATED_NEURAL_REFERENCE_WAV)),--reference-wav "$(INTEGRATED_NEURAL_REFERENCE_WAV)",) \
+		$(if $(strip $(INTEGRATED_NEURAL_SEGMENTS)),--segments "$(INTEGRATED_NEURAL_SEGMENTS)",)
+
 lab-sweep-neural-blend:
 	uv --project lab run greybound-lab sweep-neural-blend \
 		--analytic-wav "$(INTEGRATED_NEURAL_DIR)/analytic.wav" \
@@ -237,7 +287,7 @@ lab-evaluate-analytic-common-cathode:
 	cargo run -p greybound --example common_cathode_dataset_eval -- \
 		--manifest "$(NEURAL_DATASET_MANIFEST)" \
 		--report "$(ANALYTIC_EVAL_REPORT)" \
-		--stride "$(NEURAL_STRIDE)" \
+		--stride "$(ANALYTIC_STRIDE)" \
 		--split "$(NEURAL_EVAL_SPLIT)"
 
 wasm-build:
@@ -267,4 +317,4 @@ docs-deploy: docs-vercel-build
 
 vercel-deploy: web-deploy docs-deploy
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy

@@ -52,6 +52,7 @@ export function formatDbfs(level: number) {
 export function runtimePreview(rig: RigPreset, runtime: RuntimeConfig) {
   return [
     `engine: greybound-wasm / ${rig.model}`,
+    `first-stage: ${runtime.firstStageModel}`,
     `rig: ${rig.file}`,
     `device: ${runtime.device}`,
     `input: ${runtime.inputSourceUrl}`,

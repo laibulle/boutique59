@@ -195,6 +195,7 @@ export type RuntimeConfig = {
   monitorLog: string;
   neuralCell: string;
   neuralCellMode: "shadow" | "replace";
+  firstStageModel: "analytic" | "graybox";
 };
 
 export const defaultRuntimeConfig: RuntimeConfig = {
@@ -218,4 +219,5 @@ export const defaultRuntimeConfig: RuntimeConfig = {
   monitorLog: "greybound-monitor.log",
   neuralCell: "",
   neuralCellMode: "shadow",
+  firstStageModel: "analytic",
 };

@@ -9,6 +9,7 @@ from greybound_lab.integrated_neural import evaluate_integrated_neural_cell
 from greybound_lab.metrics import compare_signals
 from greybound_lab.nam import write_nam_pack_manifest
 from greybound_lab.nam_render import render_nam
+from greybound_lab.neural_blend import parse_alpha_csv, run_neural_blend_sweep
 from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export_neural_cell_vectors
 from greybound_lab.neural_cell import train_common_cathode_mlp
 from greybound_lab.report import write_markdown_report
@@ -44,6 +45,7 @@ def main() -> None:
     render.add_argument("--output-db", type=float, default=-18.0)
     render.add_argument("--ir", action="store_true")
     render.add_argument("--ir-wav", type=Path, default=DEFAULT_IR_WAV)
+    render.add_argument("--disable-neural-cell", action="store_true")
 
     stimuli = subparsers.add_parser("generate-stimuli", help="Generate standard lab WAV stimuli and marker files.")
     stimuli.add_argument("--output-dir", type=Path, default=Path("lab/stimuli"))
@@ -184,6 +186,20 @@ def main() -> None:
     rig_sweep.add_argument("--segments", type=Path)
     rig_sweep.add_argument("--max-lag-ms", type=float, default=100.0)
 
+    blend_sweep = subparsers.add_parser(
+        "sweep-neural-blend",
+        help="Blend analytic and neural-replace WAVs offline and score each alpha against a NAM reference.",
+    )
+    blend_sweep.add_argument("--analytic-wav", required=True, type=Path)
+    blend_sweep.add_argument("--replace-wav", required=True, type=Path)
+    blend_sweep.add_argument("--reference-wav", required=True, type=Path)
+    blend_sweep.add_argument("--output-dir", type=Path, default=Path("lab/reports/neural-blend-sweep"))
+    blend_sweep.add_argument("--report", type=Path, default=Path("lab/reports/neural-blend-sweep.md"))
+    blend_sweep.add_argument("--metadata", type=Path, default=Path("lab/reports/neural-blend-sweep.run.json"))
+    blend_sweep.add_argument("--alphas", default="0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1")
+    blend_sweep.add_argument("--segments", type=Path)
+    blend_sweep.add_argument("--max-lag-ms", type=float, default=100.0)
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -213,6 +229,8 @@ def main() -> None:
         run_render_nam(args)
     elif args.command == "sweep-rig-vs-reference":
         run_sweep_rig_vs_reference(args)
+    elif args.command == "sweep-neural-blend":
+        run_sweep_neural_blend(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -256,6 +274,7 @@ def run_render_rig(args: argparse.Namespace) -> None:
         output_gain_db=args.output_db,
         ir_enabled=args.ir,
         ir_wav=args.ir_wav,
+        disable_neural_cell=args.disable_neural_cell,
     )
     print(f"wrote {args.output_wav}")
     print(f"wrote {args.metadata}")
@@ -418,6 +437,28 @@ def run_sweep_rig_vs_reference(args: argparse.Namespace) -> None:
         f"lsd={best.metrics.log_spectral_distance_db:.2f}dB "
         f"null={best.metrics.null_relative_db:.2f}dB"
     )
+
+
+def run_sweep_neural_blend(args: argparse.Namespace) -> None:
+    try:
+        alphas = parse_alpha_csv(args.alphas)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    points = run_neural_blend_sweep(
+        analytic_wav=args.analytic_wav,
+        replace_wav=args.replace_wav,
+        reference_wav=args.reference_wav,
+        output_dir=args.output_dir,
+        report=args.report,
+        metadata=args.metadata,
+        alphas=alphas,
+        segments=load_segments(args.segments) if args.segments else None,
+        max_lag_ms=args.max_lag_ms,
+    )
+    best = min(points, key=lambda point: point.score.total)
+    print(f"wrote {args.report}")
+    print(f"wrote {args.metadata}")
+    print(f"best alpha={best.alpha:.3f} score={best.score.total:.4f}")
 
 
 def parse_sweep_specs(sweep_specs: list[str] | None, control: str, values: str | None) -> dict[str, list[float]]:

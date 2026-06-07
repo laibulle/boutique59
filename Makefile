@@ -54,6 +54,10 @@ INTEGRATED_NEURAL_RIG ?= rigs/nox30-nam-anchor.json5
 INTEGRATED_NEURAL_IR ?= 0
 INTEGRATED_NEURAL_REFERENCE_WAV ?= lab/reports/nam-diagnostics-ac30hwh-topboost-gain5-brit-noir.wav
 INTEGRATED_NEURAL_SEGMENTS ?= lab/segments/guitar-chords.markers.json
+NEURAL_BLEND_DIR ?= lab/reports/neural-blend-first-stage-anchor-current
+NEURAL_BLEND_REPORT ?= lab/reports/neural-blend-first-stage-anchor-current.md
+NEURAL_BLEND_METADATA ?= lab/reports/neural-blend-first-stage-anchor-current.run.json
+NEURAL_BLEND_ALPHAS ?= 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1
 OVERWRITE ?= 0
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
@@ -209,6 +213,17 @@ lab-evaluate-integrated-neural-cell: build
 		$(if $(strip $(INTEGRATED_NEURAL_REFERENCE_WAV)),--reference-wav "$(INTEGRATED_NEURAL_REFERENCE_WAV)",) \
 		$(if $(strip $(INTEGRATED_NEURAL_SEGMENTS)),--segments "$(INTEGRATED_NEURAL_SEGMENTS)",)
 
+lab-sweep-neural-blend:
+	uv --project lab run greybound-lab sweep-neural-blend \
+		--analytic-wav "$(INTEGRATED_NEURAL_DIR)/analytic.wav" \
+		--replace-wav "$(INTEGRATED_NEURAL_DIR)/replace.wav" \
+		--reference-wav "$(INTEGRATED_NEURAL_REFERENCE_WAV)" \
+		--output-dir "$(NEURAL_BLEND_DIR)" \
+		--report "$(NEURAL_BLEND_REPORT)" \
+		--metadata "$(NEURAL_BLEND_METADATA)" \
+		--alphas "$(NEURAL_BLEND_ALPHAS)" \
+		$(if $(strip $(INTEGRATED_NEURAL_SEGMENTS)),--segments "$(INTEGRATED_NEURAL_SEGMENTS)",)
+
 lab-evaluate-analytic-common-cathode:
 	cargo run -p greybound --example common_cathode_dataset_eval -- \
 		--manifest "$(NEURAL_DATASET_MANIFEST)" \
@@ -216,4 +231,4 @@ lab-evaluate-analytic-common-cathode:
 		--stride "$(NEURAL_STRIDE)" \
 		--split "$(NEURAL_EVAL_SPLIT)"
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-analytic-common-cathode
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode

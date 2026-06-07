@@ -224,13 +224,29 @@ uv --project lab run greybound-lab sweep-rig-vs-reference \
 The static MLP is now in the same range as the analytic baseline on the expanded
 SPICE dataset and is much closer to the analytic Nox30 chain in replacement
 mode. It still does not improve the NAM log-spectral metric, so it is not
-promoted. The integrated report now separates quiet preroll from program
-material; excluding preroll, NAM log-spectral distance is about `10.87 dB`
-analytic versus `11.10 dB` neural replace. Treat the residual as model-shape
-evidence: nonlinear transfer, bias dynamics, discretization, or fixture
-mismatch. The same report includes harmonic and IMD shape checks; current
-THD/IMD deltas are small, which pushes the next investigation toward external
-alignment and fixture equivalence rather than only a larger static curve fit.
+promoted. The integrated report now uses a NAM-first weighted score: `0.5308`
+for analytic versus `0.5335` for neural replace, lower is better. It also
+separates quiet preroll from program material; excluding preroll, NAM
+log-spectral distance is about `10.87 dB` analytic versus `11.10 dB` neural
+replace, with weighted score `0.4956` versus `0.4978`. Treat the residual as
+model-shape evidence: nonlinear transfer, bias dynamics, discretization, or
+fixture mismatch. The same report includes harmonic and IMD shape checks;
+current THD/IMD deltas are small, which pushes the next investigation toward
+external alignment and fixture equivalence rather than only a larger static
+curve fit.
+
+Run an offline blend sweep after the integrated neural report:
+
+```sh
+make lab-sweep-neural-blend
+```
+
+This blends `analytic.wav` and `replace.wav` without changing the engine and
+scores each alpha against NAM. The current result chooses `alpha=0.000` for both
+global and program-material scores, so no partial blend of the current neural
+cell improves the NAM objective. The next useful work is therefore not a blend
+control; it is a better neural target, a richer cell representation, or a
+full-chain training/evaluation objective tied to NAM.
 
 Download public TONE3000 DI input WAV files for local NAM and Greybound
 integration tests:

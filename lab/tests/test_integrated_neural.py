@@ -61,11 +61,14 @@ def test_evaluate_integrated_neural_cell_renders_three_modes(monkeypatch, tmp_pa
 
     assert [call.get("neural_cell_mode") for call in calls] == [None, "shadow", "replace"]
     assert calls[0].get("neural_cell") is None
+    assert calls[0]["disable_neural_cell"] is True
     assert calls[1]["neural_cell"] == ("nox30.first_stage", Path("lab/models/cell/model.greybound.json"))
     assert result.shadow_error_avg_v == 0.01
     assert result.analytic_vs_reference is not None
     assert result.replace_vs_reference is not None
-    assert "NAM Reference Comparison" in (tmp_path / "report.md").read_text(encoding="utf-8")
+    report = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "NAM Reference Comparison" in report
+    assert "NAM Match Score" in report
 
 
 def test_integrated_report_renders_segment_deltas(tmp_path: Path) -> None:
@@ -101,9 +104,18 @@ def test_integrated_report_renders_segment_deltas(tmp_path: Path) -> None:
 
     assert "Replace vs Analytic Segment Metrics" in report
     assert "NAM Reference Program-Material Comparison" in report
+    assert "NAM Match Score" in report
+    assert "NAM Program-Material Match Score" in report
     assert "NAM Reference Segment Deltas" in report
     assert "| opening_attack | attack |" in report
     assert "1.50" in report
+
+
+def test_nam_match_score_prefers_spectral_improvement_over_null_only() -> None:
+    spectral_better = _comparison_with_segment("segment", lsd=10.0, null=-5.0, envelope=-7.0)
+    null_only = _comparison_with_segment("segment", lsd=13.0, null=-6.0, envelope=-7.0)
+
+    assert integrated_neural.nam_match_score(spectral_better).total < integrated_neural.nam_match_score(null_only).total
 
 
 def _comparison_with_segment(name: str, *, lsd: float, null: float, envelope: float) -> ComparisonMetrics:

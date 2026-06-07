@@ -25,12 +25,19 @@ struct FirstStageNeuralConfig {
     mode: NeuralCellMode,
 }
 
+#[derive(Clone)]
+enum FirstStageNeuralSelection {
+    Default,
+    Disabled,
+    Configured(FirstStageNeuralConfig),
+}
+
 struct FirstStageNeural {
     adapter: CommonCathodeNeuralAdapter,
     mode: NeuralCellMode,
 }
 
-static FIRST_STAGE_NEURAL_CONFIG: OnceLock<Mutex<Option<FirstStageNeuralConfig>>> = OnceLock::new();
+static FIRST_STAGE_NEURAL_CONFIG: OnceLock<Mutex<FirstStageNeuralSelection>> = OnceLock::new();
 
 pub(in crate::amp) struct Nox30 {
     sample_rate: f32,
@@ -310,28 +317,35 @@ fn first_stage_params(sample_rate: f32) -> CommonCathodeParams {
 }
 
 pub(super) fn configure_first_stage_neural(descriptor_path: Option<PathBuf>, mode: NeuralCellMode) {
-    let slot = FIRST_STAGE_NEURAL_CONFIG.get_or_init(|| Mutex::new(None));
+    let slot =
+        FIRST_STAGE_NEURAL_CONFIG.get_or_init(|| Mutex::new(FirstStageNeuralSelection::Default));
     *slot.lock().expect("nox30 neural config mutex poisoned") =
-        descriptor_path.map(|descriptor_path| FirstStageNeuralConfig {
-            descriptor_path,
-            mode,
-        });
+        if let Some(descriptor_path) = descriptor_path {
+            FirstStageNeuralSelection::Configured(FirstStageNeuralConfig {
+                descriptor_path,
+                mode,
+            })
+        } else {
+            FirstStageNeuralSelection::Disabled
+        };
 }
 
 fn first_stage_neural(sample_rate: f32) -> Option<FirstStageNeural> {
-    let config = configured_first_stage_neural()
-        .or_else(|| {
-            env_first_stage_neural(
-                "GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR",
-                NeuralCellMode::Shadow,
-            )
-        })
+    let config = match first_stage_neural_selection() {
+        FirstStageNeuralSelection::Disabled => None,
+        FirstStageNeuralSelection::Configured(config) => Some(config),
+        FirstStageNeuralSelection::Default => env_first_stage_neural(
+            "GREYBOUND_NOX30_FIRST_STAGE_SHADOW_DESCRIPTOR",
+            NeuralCellMode::Shadow,
+        )
         .or_else(|| {
             env_first_stage_neural(
                 "GREYBOUND_NOX30_FIRST_STAGE_REPLACE_DESCRIPTOR",
                 NeuralCellMode::Replace,
             )
-        })?;
+        })
+        .or_else(default_first_stage_neural),
+    }?;
     let cell = ExperimentalNeuralCell::from_descriptor_path(&config.descriptor_path).ok()?;
     let params = first_stage_params(sample_rate);
     let output_bias = common_cathode_silence_output(params);
@@ -358,9 +372,9 @@ fn common_cathode_silence_output(params: CommonCathodeParams) -> f32 {
     output
 }
 
-fn configured_first_stage_neural() -> Option<FirstStageNeuralConfig> {
+fn first_stage_neural_selection() -> FirstStageNeuralSelection {
     FIRST_STAGE_NEURAL_CONFIG
-        .get_or_init(|| Mutex::new(None))
+        .get_or_init(|| Mutex::new(FirstStageNeuralSelection::Default))
         .lock()
         .expect("nox30 neural config mutex poisoned")
         .clone()
@@ -370,6 +384,15 @@ fn env_first_stage_neural(name: &str, mode: NeuralCellMode) -> Option<FirstStage
     env::var_os(name).map(|descriptor_path| FirstStageNeuralConfig {
         descriptor_path: PathBuf::from(descriptor_path),
         mode,
+    })
+}
+
+fn default_first_stage_neural() -> Option<FirstStageNeuralConfig> {
+    let descriptor_path =
+        PathBuf::from("lab/models/common-cathode-12ax7-mlp-current/model.greybound.json");
+    descriptor_path.exists().then_some(FirstStageNeuralConfig {
+        descriptor_path,
+        mode: NeuralCellMode::Replace,
     })
 }
 

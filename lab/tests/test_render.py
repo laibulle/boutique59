@@ -45,6 +45,7 @@ def test_render_rig_writes_metadata(monkeypatch, tmp_path: Path) -> None:
         monitor_log=repo_root / "lab/renders/test.monitor.log",
         neural_cell=("nox30.first_stage", Path("lab/models/cell/model.greybound.json")),
         neural_cell_mode="replace",
+        disable_neural_cell=True,
     )
 
     assert calls[0]["command"][0] == "target/release/greybound-cli"
@@ -55,6 +56,7 @@ def test_render_rig_writes_metadata(monkeypatch, tmp_path: Path) -> None:
     assert "--monitor-log" in calls[0]["command"]
     assert "--neural-cell" in calls[0]["command"]
     assert "--neural-cell-mode" in calls[0]["command"]
+    assert "--disable-neural-cell" in calls[0]["command"]
     payload = json.loads(metadata.read_text(encoding="utf-8"))
     assert payload["project_revision"] == "abc123"
     assert payload["candidate"]["kind"] == "greybound-render"
@@ -67,6 +69,7 @@ def test_render_rig_writes_metadata(monkeypatch, tmp_path: Path) -> None:
     assert payload["audio"]["monitor_enabled"] is True
     assert payload["audio"]["neural_cell"]["component"] == "nox30.first_stage"
     assert payload["audio"]["neural_cell"]["mode"] == "replace"
+    assert payload["audio"]["disable_neural_cell"] is True
 
 
 def test_render_rig_can_pipe_rig_text_to_stdin(monkeypatch, tmp_path: Path) -> None:

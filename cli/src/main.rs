@@ -2950,6 +2950,7 @@ struct Args {
     model: String,
     neural_cells: Vec<NeuralCellOverride>,
     neural_cell_mode: NeuralCellMode,
+    disable_neural_cell: bool,
 }
 
 struct NeuralCellOverride {
@@ -3130,7 +3131,11 @@ fn main() -> Result<()> {
     let cab_controls = SharedCabControls::new(args.ir);
     let mut device_controls_snapshot = shared_device_controls.load();
     let input_gain = args.input_gain;
-    apply_neural_overrides(&args.neural_cells, args.neural_cell_mode)?;
+    apply_neural_overrides(
+        &args.neural_cells,
+        args.neural_cell_mode,
+        args.disable_neural_cell,
+    )?;
     let mut chain = SignalChain::new(args.sample_rate as f32, args.chain_config.clone());
     let mut speaker = args
         .ir_path
@@ -3443,6 +3448,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut monitor_log = PathBuf::from("greybound-monitor.log");
     let mut neural_cells = Vec::new();
     let mut neural_cell_mode = NeuralCellMode::Shadow;
+    let mut disable_neural_cell = false;
     let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -3482,6 +3488,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
                 neural_cell_mode =
                     parse_neural_cell_mode(&next_value(&mut args, "--neural-cell-mode")?)?
             }
+            "--disable-neural-cell" => disable_neural_cell = true,
             "--list-devices" => {
                 print_devices(host)?;
                 std::process::exit(0);
@@ -3571,6 +3578,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         model,
         neural_cells,
         neural_cell_mode,
+        disable_neural_cell,
     })
 }
 
@@ -3630,8 +3638,18 @@ fn neural_cell_mode_name(mode: NeuralCellMode) -> &'static str {
     }
 }
 
-fn apply_neural_overrides(overrides: &[NeuralCellOverride], mode: NeuralCellMode) -> Result<()> {
-    configure_nox30_first_stage_neural(None, NeuralCellMode::Shadow);
+fn apply_neural_overrides(
+    overrides: &[NeuralCellOverride],
+    mode: NeuralCellMode,
+    disable_neural_cell: bool,
+) -> Result<()> {
+    if disable_neural_cell {
+        configure_nox30_first_stage_neural(None, NeuralCellMode::Shadow);
+        return Ok(());
+    }
+    if overrides.is_empty() {
+        return Ok(());
+    }
     for override_ in overrides {
         match override_.component.as_str() {
             "nox30.first_stage" => {
@@ -3737,6 +3755,7 @@ fn print_help() {
          \x20 --monitor-log PATH        Rotating monitor log [default: greybound-monitor.log]\n\
          \x20 --neural-cell COMPONENT=PATH  Run a neural counterpart for a supported component\n\
          \x20 --neural-cell-mode MODE    Neural mode: shadow or replace [default: shadow]\n\
+         \x20 --disable-neural-cell      Disable default and configured neural-cell replacements\n\
          \x20 --ir PATH                 Force-enable a speaker IR WAV path, even if the rig has no active cab\n\
          \x20 --list-devices            List CoreAudio devices"
     );

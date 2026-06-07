@@ -362,16 +362,35 @@ Current integrated result:
 - replace-vs-analytic log-spectral distance: about `3.71 dB`,
 - analytic-vs-NAM log-spectral distance: about `12.43 dB`,
 - replace-vs-NAM log-spectral distance: about `12.68 dB`,
+- weighted NAM score: `0.5308` analytic versus `0.5335` neural replace,
 - program-material NAM log-spectral distance after preroll: `10.87 dB` analytic
-  versus `11.10 dB` neural replace.
+  versus `11.10 dB` neural replace,
+- program-material weighted NAM score: `0.4956` analytic versus `0.4978`
+  neural replace.
 
 The neural path is therefore integrated and measurable, but not promoted. The
 working artifact is now much closer to the analytic chain after high-amplitude
-coverage was added, but it does not improve the NAM-facing log-spectral metric.
+coverage was added, but it does not improve the NAM-facing weighted score.
 Segment deltas show the largest apparent regression in the quiet opening
 preroll; after excluding preroll the NAM metric still moves slightly away, but
 by a smaller amount. Promotion still needs local and external-reference evidence
-to agree.
+to agree. The promotion rule is NAM-first: `replace` should beat `analytic` on
+the weighted NAM score, while `replace-vs-analytic` remains a stability
+guardrail rather than the source of truth.
+
+An offline neural blend sweep confirms this decision:
+
+```sh
+make lab-sweep-neural-blend
+```
+
+The command blends `analytic.wav` and `replace.wav` for several alpha values and
+scores each result against NAM with the same weighted score. Current result:
+`alpha=0.000` is best globally with score `0.5308`, and `alpha=0.000` is also
+best after excluding preroll with score `0.4956`. Therefore no partial blend of
+the current first-stage neural cell improves the NAM objective. The next useful
+work is not a blend control; it is a better neural target, richer cell
+representation, or a full-chain objective tied to NAM.
 
 Evaluate the artifact against the SPICE dataset in physical units:
 

@@ -32,6 +32,15 @@ class IntegratedNeuralReport:
     replace_vs_reference_program: ComparisonMetrics | None = None
 
 
+@dataclass(frozen=True)
+class NamMatchScore:
+    total: float
+    spectral: float
+    null: float
+    envelope: float
+    gain: float
+
+
 def evaluate_integrated_neural_cell(
     *,
     repo_root: Path,
@@ -75,6 +84,7 @@ def evaluate_integrated_neural_cell(
         output_gain_db=output_gain_db,
         ir_enabled=ir_enabled,
         ir_wav=ir_wav,
+        disable_neural_cell=True,
     )
     render_rig(
         repo_root=repo_root,
@@ -244,7 +254,9 @@ def write_integrated_neural_report(
 {_render_single_segment_table("Replace vs Analytic Segment Metrics", metrics)}
 
 {_render_reference_comparisons(result.analytic_vs_reference, result.replace_vs_reference)}
+{_render_nam_score_table("NAM Match Score", result.analytic_vs_reference, result.replace_vs_reference)}
 {_render_program_reference_comparisons(result)}
+{_render_nam_score_table("NAM Program-Material Match Score", result.analytic_vs_reference_program, result.replace_vs_reference_program)}
 {_render_reference_segment_deltas(result.analytic_vs_reference, result.replace_vs_reference)}
 
 ## Decision
@@ -288,6 +300,31 @@ This excludes explicit preroll before `{result.program_start_s:.3f} s`.
 | --- | ---: | ---: | ---: | ---: |
 | Analytic vs NAM | {analytic.gain_db:.2f} | {analytic.null_relative_db:.2f} | {analytic.log_spectral_distance_db:.2f} | {analytic.envelope_error_db:.2f} |
 | Replace vs NAM | {replace.gain_db:.2f} | {replace.null_relative_db:.2f} | {replace.log_spectral_distance_db:.2f} | {replace.envelope_error_db:.2f} |
+
+"""
+
+
+def _render_nam_score_table(
+    title: str,
+    analytic: ComparisonMetrics | None,
+    replace: ComparisonMetrics | None,
+) -> str:
+    if analytic is None or replace is None:
+        return ""
+    analytic_score = nam_match_score(analytic)
+    replace_score = nam_match_score(replace)
+    delta = replace_score.total - analytic_score.total
+    winner = "replace" if delta < 0.0 else "analytic"
+    return f"""## {title}
+
+Lower is better. Weights: `45%` log-spectral, `30%` null residual, `20%` envelope, `5%` gain correction.
+
+| Render | Score | Spectral | Null | Envelope | Gain |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Analytic vs NAM | {analytic_score.total:.4f} | {analytic_score.spectral:.4f} | {analytic_score.null:.4f} | {analytic_score.envelope:.4f} | {analytic_score.gain:.4f} |
+| Replace vs NAM | {replace_score.total:.4f} | {replace_score.spectral:.4f} | {replace_score.null:.4f} | {replace_score.envelope:.4f} | {replace_score.gain:.4f} |
+
+- Score delta replace-analytic: `{delta:+.4f}`. Current winner: `{winner}`.
 
 """
 
@@ -358,7 +395,7 @@ def _render_decision(result: IntegratedNeuralReport) -> str:
     ]
     if result.shadow_error_avg_v is not None:
         lines.append(
-            f"- Shadow first-stage average error is `{result.shadow_error_avg_v:.6f} V`; this is still too high for promotion."
+            f"- Shadow first-stage average error is `{result.shadow_error_avg_v:.6f} V`; use this for component debugging, not as the primary promotion gate."
         )
     replace_null = result.replace_vs_analytic.null_relative_db
     if replace_null > -18.0:
@@ -371,6 +408,16 @@ def _render_decision(result: IntegratedNeuralReport) -> str:
     if result.analytic_vs_reference is not None and result.replace_vs_reference is not None:
         analytic = result.analytic_vs_reference
         replace = result.replace_vs_reference
+        analytic_score = nam_match_score(analytic)
+        replace_score = nam_match_score(replace)
+        score_delta = replace_score.total - analytic_score.total
+        if score_delta < 0.0:
+            score_note = "replace is better on the weighted NAM score."
+        else:
+            score_note = "analytic is still better on the weighted NAM score."
+        lines.append(
+            f"- Weighted NAM score changes from `{analytic_score.total:.4f}` to `{replace_score.total:.4f}` (`{score_delta:+.4f}`); {score_note}"
+        )
         lines.append(
             f"- Against NAM, replace changes log-spectral distance from `{analytic.log_spectral_distance_db:.2f} dB` to `{replace.log_spectral_distance_db:.2f} dB`."
         )
@@ -380,13 +427,31 @@ def _render_decision(result: IntegratedNeuralReport) -> str:
     if result.analytic_vs_reference_program is not None and result.replace_vs_reference_program is not None:
         analytic_program = result.analytic_vs_reference_program
         replace_program = result.replace_vs_reference_program
+        analytic_program_score = nam_match_score(analytic_program)
+        replace_program_score = nam_match_score(replace_program)
         lines.append(
             f"- Excluding preroll, NAM log-spectral distance changes from `{analytic_program.log_spectral_distance_db:.2f} dB` to `{replace_program.log_spectral_distance_db:.2f} dB`."
+        )
+        lines.append(
+            f"- Excluding preroll, weighted NAM score changes from `{analytic_program_score.total:.4f}` to `{replace_program_score.total:.4f}`."
         )
     lines.extend(
         [
             "",
-            "Conclusion: keep this neural cell as a working integration probe. It is not promoted as a better Nox30 component until local shadow error, replace residual, and NAM-facing metrics all support the change.",
+            "Conclusion: keep this neural cell as a working integration probe. Promotion is NAM-first: the replacement should improve the weighted NAM score while replace-vs-analytic remains a stability guardrail.",
         ]
     )
     return "\n".join(lines)
+
+
+def nam_match_score(metrics: ComparisonMetrics) -> NamMatchScore:
+    spectral = _clamp01(metrics.log_spectral_distance_db / 20.0)
+    null = _clamp01((metrics.null_relative_db + 12.0) / 12.0)
+    envelope = _clamp01((metrics.envelope_error_db + 12.0) / 12.0)
+    gain = _clamp01(abs(metrics.gain_db) / 6.0)
+    total = 0.45 * spectral + 0.30 * null + 0.20 * envelope + 0.05 * gain
+    return NamMatchScore(total=total, spectral=spectral, null=null, envelope=envelope, gain=gain)
+
+
+def _clamp01(value: float) -> float:
+    return min(1.0, max(0.0, value))

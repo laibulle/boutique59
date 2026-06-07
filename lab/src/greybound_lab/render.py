@@ -28,6 +28,7 @@ def render_rig(
     monitor_log: Path | None = None,
     neural_cell: tuple[str, Path] | None = None,
     neural_cell_mode: str = "shadow",
+    disable_neural_cell: bool = False,
 ) -> None:
     output_wav.parent.mkdir(parents=True, exist_ok=True)
     metadata.parent.mkdir(parents=True, exist_ok=True)
@@ -62,6 +63,8 @@ def render_rig(
         component, descriptor = neural_cell
         command.extend(["--neural-cell", f"{component}={descriptor}"])
         command.extend(["--neural-cell-mode", neural_cell_mode])
+    if disable_neural_cell:
+        command.append("--disable-neural-cell")
 
     subprocess.run(command, cwd=repo_root, check=True, input=rig_text, text=rig_text is not None)
 
@@ -92,6 +95,7 @@ def render_rig(
             }
             if neural_cell
             else None,
+            "disable_neural_cell": disable_neural_cell,
         },
         "environment": {
             "os": platform.platform(),

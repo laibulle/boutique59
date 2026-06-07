@@ -1,0 +1,30 @@
+# Local research artifacts.
+datasets/*
+references/*
+renders/*
+reports/*
+
+# Keep directory placeholders.
+!datasets/.gitkeep
+!references/.gitkeep
+!renders/.gitkeep
+!reports/.gitkeep
+
+# Tool caches.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated audio and plots.
+*.wav
+*.flac
+*.aiff
+*.png
+*.svg
+*.html
+*.jsonl
+*.npz
+*.npy
+*.pt
+*.onnx

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greybound.local/schemas/run-metadata.schema.json",
+  "title": "Greybound lab run metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_revision",
+    "candidate",
+    "audio"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "project_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["greybound-render", "spice-render", "nam-render", "measurement", "other"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rig": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["greybound-render", "spice-render", "nam-render", "measurement", "other"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "known_latency_samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_rate_hz", "duration_seconds"],
+      "properties": {
+        "sample_rate_hz": {
+          "type": "integer",
+          "minimum": 8000
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "input_wav": {
+          "type": "string"
+        },
+        "input_gain_db": {
+          "type": "number"
+        },
+        "output_gain_db": {
+          "type": "number"
+        },
+        "ir_enabled": {
+          "type": "boolean"
+        },
+        "ir_path": {
+          "type": "string"
+        }
+      }
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["number", "string", "boolean", "null"]
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "toolchain": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

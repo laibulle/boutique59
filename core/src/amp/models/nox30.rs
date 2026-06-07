@@ -65,7 +65,7 @@ impl Nox30 {
             sample_rate,
             input_volume: BrightVolumeInputStage::new(input_volume_params(sample_rate)),
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
-            first_stage_neural: first_stage_neural(),
+            first_stage_neural: first_stage_neural(sample_rate),
             first_stage_shadow_output_v: None,
             first_stage_shadow_error_v: None,
             follower: CathodeFollowerStage::new(follower_params(sample_rate)),
@@ -145,9 +145,11 @@ impl Nox30 {
 
         let follower_drive = self.follower.process(first_stage * preamp_voltage);
         let follower_current = self.follower.operating_point().plate_current;
-        let toned = self
+        let tone_stack_output = self
             .tone_stack
             .process(follower_drive, controls.bass, controls.treble);
+        let body_mix = 0.50 + controls.bass.clamp(0.0, 1.0) * 0.24;
+        let toned = tone_stack_output * (1.0 - body_mix) + follower_drive * body_mix;
         let nox30_drive = controls.drive.clamp(0.0, 1.0);
         let (driven_tone, drive_current, recovery_current) = if nox30_drive > 0.0 {
             let hot_stage = self
@@ -168,7 +170,7 @@ impl Nox30 {
         };
 
         Nox30PreampOutput {
-            send_voltage: driven_tone * 2.8 * preamp_voltage * phase_inverter_voltage,
+            send_voltage: driven_tone * 1.25 * preamp_voltage * phase_inverter_voltage,
             first_stage_current,
             follower_current,
             drive_current,
@@ -247,8 +249,8 @@ fn cut_presence_params(sample_rate: f32) -> CutPresenceParams {
     CutPresenceParams {
         sample_rate,
         min_cutoff_hz: 1_150.0,
-        max_cutoff_hz: 13_500.0,
-        presence_gain: 0.35,
+        max_cutoff_hz: 18_000.0,
+        presence_gain: 0.55,
     }
 }
 
@@ -278,7 +280,7 @@ pub(super) fn configure_first_stage_neural(descriptor_path: Option<PathBuf>, mod
         });
 }
 
-fn first_stage_neural() -> Option<FirstStageNeural> {
+fn first_stage_neural(sample_rate: f32) -> Option<FirstStageNeural> {
     let config = configured_first_stage_neural()
         .or_else(|| {
             env_first_stage_neural(
@@ -293,17 +295,29 @@ fn first_stage_neural() -> Option<FirstStageNeural> {
             )
         })?;
     let cell = ExperimentalNeuralCell::from_descriptor_path(&config.descriptor_path).ok()?;
-    let params = first_stage_params(1.0);
+    let params = first_stage_params(sample_rate);
+    let output_bias = common_cathode_silence_output(params);
     Some(FirstStageNeural {
         adapter: CommonCathodeNeuralAdapter::from_cell(
             cell,
             CommonCathodeNeuralAdapterParams {
                 input_gain: params.input_gain,
                 output_scale: params.output_scale,
+                output_bias,
             },
         ),
         mode: config.mode,
     })
+}
+
+fn common_cathode_silence_output(params: CommonCathodeParams) -> f32 {
+    let mut stage = CommonCathodeStage::new(params);
+    let warmup_samples = (params.sample_rate as usize / 20).max(1);
+    let mut output = 0.0;
+    for _ in 0..warmup_samples {
+        output = stage.process(0.0);
+    }
+    output
 }
 
 fn configured_first_stage_neural() -> Option<FirstStageNeuralConfig> {
@@ -396,12 +410,12 @@ fn power_stage_params(sample_rate: f32) -> PushPullEl84Params {
         cathode_resistance: 130.0,
         cathode_capacitance: 18e-6,
         idle_current: 0.040,
-        drive_gain: 18.0,
+        drive_gain: 34.0,
         current_gain: 0.0048,
         load_current_coupling: 1.35,
         attack_current_coupling: 0.65,
-        compression: 0.22,
-        output_scale: 0.020,
+        compression: 0.38,
+        output_scale: 0.010,
     }
 }
 

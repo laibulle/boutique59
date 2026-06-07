@@ -21,6 +21,7 @@ pub struct NeuralCellRuntime {
 pub struct CommonCathodeNeuralAdapterParams {
     pub input_gain: f32,
     pub output_scale: f32,
+    pub output_bias: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -272,7 +273,7 @@ impl CommonCathodeNeuralAdapter {
         let plate_ac_v = self
             .runtime
             .process_sample(input_v * self.params.input_gain);
-        let output_v = -plate_ac_v * self.params.output_scale;
+        let output_v = self.params.output_bias - plate_ac_v * self.params.output_scale;
         self.last_plate_ac_v = plate_ac_v;
         self.last_output_v = output_v;
         output_v
@@ -500,19 +501,20 @@ mod tests {
             CommonCathodeNeuralAdapterParams {
                 input_gain: 3.0,
                 output_scale: 0.25,
+                output_bias: 10.0,
             },
         );
 
         let output = adapter.process_sample(0.5);
         assert_eq!(adapter.last_plate_ac_v(), 3.5);
-        assert_eq!(output, -0.875);
-        assert_eq!(adapter.last_output_v(), -0.875);
+        assert_eq!(output, 9.125);
+        assert_eq!(adapter.last_output_v(), 9.125);
 
         let mut block_output = [0.0, 0.0];
         adapter
             .process_block(&[0.0, 1.0], &mut block_output)
             .unwrap();
-        assert_eq!(block_output, [-0.125, -1.625]);
+        assert_eq!(block_output, [9.875, 8.375]);
         let _ = fs::remove_dir_all(dir);
     }
 

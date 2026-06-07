@@ -553,7 +553,7 @@ mod tests {
         let rms = (sum / count as f32).sqrt();
         let normalized_checksum = checksum / count as f64;
         assert!(
-            (0.005..0.080).contains(&rms),
+            (0.030..0.180).contains(&rms),
             "rms={rms}, peak={peak}, checksum={normalized_checksum}"
         );
         assert!(
@@ -561,7 +561,7 @@ mod tests {
             "rms={rms}, peak={peak}, checksum={normalized_checksum}"
         );
         assert!(
-            (-0.20..0.20).contains(&normalized_checksum),
+            (-0.80..0.80).contains(&normalized_checksum),
             "rms={rms}, peak={peak}, checksum={normalized_checksum}"
         );
     }

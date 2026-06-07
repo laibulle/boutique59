@@ -90,15 +90,15 @@ def expand_renderer_command(
     ir_wav: Path | None,
 ) -> list[str]:
     placeholders = {
-        "model": str(model),
-        "input_wav": str(input_wav),
-        "output_wav": str(output_wav),
-        "metadata": str(metadata),
+        "model": shlex.quote(str(model)),
+        "input_wav": shlex.quote(str(input_wav)),
+        "output_wav": shlex.quote(str(output_wav)),
+        "metadata": shlex.quote(str(metadata)),
         "sample_rate": str(sample_rate_hz),
         "render_seconds": f"{render_seconds:g}",
         "input_db": f"{input_gain_db:g}",
         "output_db": f"{output_gain_db:g}",
-        "ir_wav": str(ir_wav) if ir_wav else "",
+        "ir_wav": shlex.quote(str(ir_wav)) if ir_wav else "",
     }
     try:
         formatted = renderer_command.format(**placeholders)

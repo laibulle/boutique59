@@ -23,6 +23,31 @@ def test_expand_renderer_command_uses_placeholders() -> None:
     assert command == ["nam-a2", "--model", "model.nam", "--in", "in.wav", "--out", "out.wav", "--sr", "48000"]
 
 
+def test_expand_renderer_command_preserves_paths_with_spaces() -> None:
+    command = expand_renderer_command(
+        "nam-a2 --model {model} --in {input_wav} --out {output_wav}",
+        model=Path("NAM Models/TopBoost Gain5.nam"),
+        input_wav=Path("tone3000-inputs/Brit - Guitar.wav"),
+        output_wav=Path("renders/Brit NAM.wav"),
+        metadata=Path("renders/Brit NAM.run.json"),
+        sample_rate_hz=48000,
+        render_seconds=2.5,
+        input_gain_db=-12.0,
+        output_gain_db=3.0,
+        ir_wav=None,
+    )
+
+    assert command == [
+        "nam-a2",
+        "--model",
+        "NAM Models/TopBoost Gain5.nam",
+        "--in",
+        "tone3000-inputs/Brit - Guitar.wav",
+        "--out",
+        "renders/Brit NAM.wav",
+    ]
+
+
 def test_render_nam_writes_metadata(tmp_path: Path) -> None:
     script = tmp_path / "fake_renderer.py"
     model = tmp_path / "model.nam"

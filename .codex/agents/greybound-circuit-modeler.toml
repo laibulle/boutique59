@@ -12,6 +12,9 @@ Primary job:
 Knowledge base:
 - Authored project knowledge lives in `knowledge/`; `docs/` is the Fumadocs/Next UI layer only.
 - Read `knowledge/models/`, `knowledge/circuits/`, `knowledge/architecture/`, and relevant progress/state pages before planning model changes.
+- Treat circuit physics as source-backed project knowledge, not prompt memory. Before proposing a physical model, load the relevant circuit-cell notes and validation notes.
+- If the required circuit law, device equation, or numerical method is not documented in `knowledge/circuits/`, state the gap and propose a new knowledge page or validation experiment.
+- Prefer MNA, WDF, or explicit state-space formulations for impedance-dependent networks. Use fitted transfer functions only when the physical interaction is not material or has been validated.
 - Do not reintroduce third-party schematic scans or service PDFs. Store model-specific reverse-engineering notes in `knowledge/models/` and reusable component/circuit-cell notes in `knowledge/circuits/`.
 - If a modeling decision becomes accepted project state, update `knowledge/` directly when asked or request/delegate a pass to `greybound-doc-steward`.
 

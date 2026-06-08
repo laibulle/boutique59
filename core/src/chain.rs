@@ -544,6 +544,15 @@ impl SignalChain {
     }
 
     pub fn process(&mut self, input: f32, controls: SignalChainControls<'_>) -> f32 {
+        self.process_with_amp_enabled(input, controls, true)
+    }
+
+    pub fn process_with_amp_enabled(
+        &mut self,
+        input: f32,
+        controls: SignalChainControls<'_>,
+        amp_enabled: bool,
+    ) -> f32 {
         let pre_amp_start = 0;
         let fx_loop_start = self.pre_amp.len();
         let post_amp_start = fx_loop_start + self.fx_loop.len();
@@ -553,11 +562,20 @@ impl SignalChain {
         let has_active_post_amp = has_active_slots(&self.post_amp, controls, post_amp_start);
 
         if !has_active_pre_amp && !has_active_fx_loop && !has_active_post_amp {
-            return self.amp.process(input, controls.amp);
+            return if amp_enabled {
+                self.amp.process(input, controls.amp)
+            } else {
+                input
+            };
         }
 
         let mut signal = ElectricalSignal::new(input, GUITAR_SOURCE_IMPEDANCE_OHMS);
         signal = process_slots(&mut self.pre_amp, signal, controls, pre_amp_start);
+
+        if !amp_enabled {
+            signal = process_slots(&mut self.post_amp, signal, controls, post_amp_start);
+            return signal.voltage;
+        }
 
         let amp_input = if has_active_pre_amp {
             self.amp_input_connection
@@ -1201,6 +1219,34 @@ mod tests {
         }
 
         assert!(difference_sum > 0.1);
+    }
+
+    #[test]
+    fn amp_bypass_preserves_active_pre_amp_pedals() {
+        let mut chain = SignalChain::new(
+            48_000.0,
+            SignalChainConfig::amp_only("nox30").with_pre_amp_device(DeviceConfig::Minotaur),
+        );
+        let controls = [DeviceSlotControls::active(DeviceControls::Minotaur(
+            MinotaurControls {
+                gain: 0.75,
+                treble: 0.55,
+                output: 0.65,
+            },
+        ))];
+        let mut difference_sum = 0.0;
+
+        for sample_idx in 0..9_600 {
+            let input =
+                (std::f32::consts::TAU * 220.0 * sample_idx as f32 / 48_000.0).sin() * 0.12;
+            let output =
+                chain.process_with_amp_enabled(input, chain_controls(&controls), false);
+            if sample_idx >= 4_800 {
+                difference_sum += (output - input).abs();
+            }
+        }
+
+        assert!(difference_sum > 1.0, "difference_sum={difference_sum}");
     }
 
     #[test]

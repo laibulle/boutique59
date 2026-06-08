@@ -194,7 +194,7 @@ def validate_sweeps(sweeps: dict[str, list[float]]) -> None:
 
 def validate_control_name(control: str) -> None:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", control):
-        raise ValueError(f"unsupported amp control name: {control}")
+        raise ValueError(f"unsupported rig control name: {control}")
 
 
 def replace_amp_controls(rig_text: str, values: dict[str, float], name: str) -> str:
@@ -212,7 +212,7 @@ def replace_amp_control_value(rig_text: str, control: str, value: float) -> str:
     control_pattern = re.compile(rf"(^\s*{re.escape(control)}\s*:\s*)([-+]?\d+(?:\.\d+)?)(\s*,)", re.MULTILINE)
     rig_text, control_count = control_pattern.subn(rf"\g<1>{value:.6f}\3", rig_text, count=1)
     if control_count != 1:
-        raise ValueError(f"could not find amp.controls.{control} in rig")
+        raise ValueError(f"could not find a unique `{control}` control in rig")
     return rig_text
 
 
@@ -245,12 +245,12 @@ def write_sweep_report(
     ranked = sorted(points, key=lambda point: sweep_score(point.metrics).total)
     best = ranked[0]
     lines = [
-        "# Rig Sweep vs NAM Reference",
+        "# Rig Control Sweep vs NAM Reference",
         "",
         "## Protocol",
         "",
         f"- Base rig: `{rig}`",
-        f"- Swept controls: `{', '.join(f'amp.controls.{control}' for control in controls)}`",
+        f"- Swept controls: `{', '.join(controls)}`",
         f"- Input DI: `{input_wav}`",
         f"- Reference WAV: `{reference_wav}`",
         "- IR policy: `amp-head-no-ir`; Greybound is rendered without `--ir`.",
@@ -309,7 +309,7 @@ def write_sweep_report(
             "",
             "## Interpretation",
             "",
-            "This report ranks by the composite score because this sweep is meant to find a coarse amp-control anchor without ignoring dynamics.",
+            "This report ranks by the composite score because this sweep is meant to find a coarse control anchor without ignoring dynamics.",
             "Use the raw metrics and rendered WAVs before deciding that one point is musically superior; a responsive gain law can be musically right even when a fixed NAM snapshot prefers a nearby static setting.",
         ]
     )

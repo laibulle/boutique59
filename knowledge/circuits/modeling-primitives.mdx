@@ -1,0 +1,65 @@
+---
+title: Modeling Primitives
+description: Shared circuit laws and numerical representations for Greybound circuit cells.
+---
+
+These primitives are the default language for reusable circuit cells. They keep physical behavior explicit enough to validate without forcing every model to become a full circuit simulator.
+
+## Conservation Laws
+
+Use Kirchhoff's Current Law for nodal solves and Kirchhoff's Voltage Law when writing loop or port equations. A circuit model should identify:
+
+- node voltages or port waves,
+- branch currents through capacitors, resistors, sources, and nonlinear devices,
+- external source and load impedances,
+- control elements that change topology or component values.
+
+If a proposed DSP block cannot identify the voltage or current it represents, treat it as an approximation and validate it against AC, transient, and audio references before accepting it as physical.
+
+## Equivalent Sources
+
+Use Thevenin or Norton equivalents at model boundaries when a full upstream/downstream solve is unnecessary. Document:
+
+- source voltage or current,
+- source impedance,
+- expected load impedance range,
+- frequency-dependent elements such as cable capacitance or coupling capacitors.
+
+Do not collapse source and load impedance into a static gain unless the target circuit is insensitive to that loading or the simplification has measured support.
+
+## Modified Nodal Analysis
+
+MNA is the preferred representation for passive networks and small mixed linear/nonlinear cells with meaningful impedance interaction.
+
+For each MNA cell, document:
+
+- node list and reference ground,
+- dynamic state variables,
+- sample-rate-dependent conductance terms,
+- source/load ports,
+- control-position mapping,
+- solver fallback for singular or near-singular configurations.
+
+Use trapezoidal integration for capacitors by default. Backward Euler can be used when stability is more important than exact high-frequency behavior, but the damping tradeoff must be noted.
+
+## Wave Digital Filters
+
+WDFs are appropriate when a circuit can be decomposed into ports with stable adaptors and local nonlinearities. Prefer WDF when it gives better numerical robustness or cleaner modular composition than a direct MNA solve.
+
+Document port resistances, adaptor topology, nonlinear root solve, and how external impedance changes are handled. Avoid WDF abstractions that hide observable node behavior needed for validation.
+
+## State-Space Blocks
+
+State-space models are acceptable for validated linear subcircuits, especially fixed tone shaping or output filtering. They must include the source/load assumptions used to derive the matrices.
+
+If controls alter the network, either derive a controlled state-space family or use an MNA/WDF formulation instead of interpolating unrelated filters without validation.
+
+## Acceptance Criteria
+
+A primitive-level model is acceptable when:
+
+- all energy-storing elements have explicit state,
+- external impedance assumptions are stated,
+- DC operating point is explainable,
+- AC response can be compared against reference curves,
+- transient behavior remains stable under silence, overload, and control changes.

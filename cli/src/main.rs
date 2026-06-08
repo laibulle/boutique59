@@ -3418,11 +3418,7 @@ fn process_one_sample(
         devices: device_controls_snapshot,
     };
     let amp_enabled = controls.load_enabled();
-    let amp_output = if amp_enabled {
-        chain.process(input, chain_controls)
-    } else {
-        input
-    };
+    let amp_output = chain.process_with_amp_enabled(input, chain_controls, amp_enabled);
     if monitor_enabled && amp_enabled {
         if let Some(operating_point) = chain.nox30_operating_point() {
             component_telemetry.record_nox30(operating_point);

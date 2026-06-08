@@ -1,0 +1,157 @@
+* Klon Centaur ngspice fixture for Greybound model work.
+* Run with: ngspice -b tests/fixtures/circuit/klon_centaur.cir
+*
+* Public sources used for topology/component values:
+* - Zpag Klon Centaur schematic and BOM:
+*   https://www.zpag.net/Electroniques/Guitar/klon_centaur_schematic.html
+* - Jatin Chowdhury KlonCentaur LTspice gain-stage reference, BSD-3-Clause:
+*   https://github.com/jatinchowdhury18/KlonCentaur
+*
+* Scope:
+* - Effect path, not bypass path.
+* - Full audio topology: input buffer, gain/clean feed-forward networks,
+*   germanium hard clipping, summing/filtering, treble, level, output recovery.
+* - TL072 sections are macromodelled as finite-gain, finite-bandwidth,
+*   rail-limited VCVS blocks. This is the only intentional simplification.
+
+.param GAIN=0.55
+.param TREBLE=0.60
+.param LEVEL=0.70
+.param V9=9
+.param VREF=4.5
+.param VNEG=-8.6
+.param VBOOST=16.2
+
+* Dual-gang gain and output/tone pots. Values from the public BOM.
+.param RV_GAIN_A_TOP={max(100k*(1-GAIN), 1)}
+.param RV_GAIN_A_BOT={max(100k*GAIN, 1)}
+.param RV_GAIN_B_TOP={max(1k*(1-GAIN), 1)}
+.param RV_GAIN_B_BOT={max(1k*GAIN, 1)}
+.param RV_TREBLE_TOP={max(10k*(1-TREBLE), 1)}
+.param RV_TREBLE_BOT={max(10k*TREBLE, 1)}
+.param RV_LEVEL_TOP={max(10k*(1-LEVEL), 1)}
+.param RV_LEVEL_BOT={max(10k*LEVEL, 1)}
+
+V9 v9 0 DC {V9}
+VREF vref 0 DC {VREF}
+VNEG vneg 0 DC {VNEG}
+VBOOST vboost 0 DC {VBOOST}
+
+* Guitar source.
+VIN guitar 0 SIN(0 120m 1k)
+Rsource guitar j2_tip 10k
+
+* Input buffer and always-buffered output/bypass feed.
+R1 j2_tip c1_in 10k
+C1 c1_in u2a_p 100n
+R2 u2a_p vref 1Meg
+XU2A u2a_p u2a_n u2a_out vboost vneg TL072_MACRO
+Ru2a_fb u2a_out u2a_n 1
+C2 u2a_out bypass_pre 4.7u
+R4 bypass_pre bypass_out 560
+R3 bypass_out vref 100k
+C13 bypass_out vneg 820p
+R20 bypass_out vneg 392k
+R25 bypass_pre level_wiper 560
+R242 bypass_out out_jack 68k
+R28 out_jack 0 100k
+
+* Drive input and non-inverting gain stage.
+C3 u2a_out gain_in 100n
+R5 gain_in gain_ref 5.1k
+C4 gain_ref vref 68n
+R8 gain_ref gain_ref_2 1.5k
+R9 gain_ref_2 vref 1k
+
+R6 gain_in u2b_p 10k
+C5 gain_in u2b_p 68n
+RVA1 u2b_p vref {RV_GAIN_A_TOP}
+RVA2 u2b_p vref {RV_GAIN_A_BOT}
+
+XU2B u2b_p u2b_n u2b_out vboost vneg TL072_MACRO
+R10 u2b_n rvb_wiper 2k
+RVB1 rvb_wiper vref {RV_GAIN_B_TOP}
+RVB2 rvb_wiper vref {RV_GAIN_B_BOT}
+R11 u2b_out u2b_n 15k
+C7 u2b_out u2b_n 82n
+R12 u2b_out rvb_wiper 422k
+C8 u2b_out rvb_wiper 390p
+
+* Hard clipping and feed-forward/summing preparation.
+C9 u2b_out clip_in 1u
+R13 clip_in clip 1k
+D2 clip 0 D1N34A
+D3 0 clip D1N34A
+C10 clip clip_coupled 1u
+R16 clip_coupled sum_drive 47k
+
+R17 vref sum_clean 27k
+R18 sum_clean vref 12k
+C12 sum_clean vref 27n
+R21 sum_clean u3b_p 1.8k
+C15 u2a_out u3b_n 4.7u
+R243 u3b_n out_jack 68k
+
+* Summing op-amp.
+XU3B u3b_p u3b_n u3b_out vboost vneg TL072_MACRO
+Ru3b_feedback u3b_out u3b_n 100k
+Rsum_drive sum_drive u3b_n 27k
+
+* Treble and level.
+R23 u3b_out treble_in 4.7k
+RTREBLE1 treble_in treble_wiper {RV_TREBLE_TOP}
+RTREBLE2 treble_wiper vref {RV_TREBLE_BOT}
+C14 treble_wiper tone_cap 3.9n
+R24 tone_cap tone_out 100k
+R29 treble_wiper level_top 27k
+R30 tone_out level_top 27k
+RLEVEL1 level_top level_wiper {RV_LEVEL_TOP}
+RLEVEL2 level_wiper vref {RV_LEVEL_BOT}
+
+* Output recovery stage.
+C16 level_wiper u3a_in 1u
+R19 u3a_in u3a_fb 15k
+R7 u3a_fb u3a_out 1.5k
+C11 u3a_fb vboost 2.2n
+R15 vboost u3a_fb 22k
+XU3A vref u3a_fb u3a_out vboost vneg TL072_MACRO
+C20 u3a_out out_coupled 20u
+R23_OUT out_coupled vref 4.7k
+Rout out_coupled vout 560
+Rload vout 0 1Meg
+
+* Power-supply parts included as load/reference nodes.
+C17 v9 0 47u
+C18 vref 0 47u
+C19 vneg 0 1u
+C21 vboost 0 1u
+C22 vref 0 1u
+D4 v9 vboost D1N4742A
+D7 0 v9 D1N4001
+D8 0 vneg D1N4001
+
+.model D1N34A D(Is=2.6n Rs=12 N=1.65 Cjo=2p Eg=0.67 Bv=30 Ibv=10u)
+.model D1N4742A D(Is=50n Rs=1.2 N=1.7 Bv=12 Ibv=5m Cjo=80p)
+.model D1N4001 D(Is=14.1n Rs=33m N=1.984 Cjo=35p Bv=50 Ibv=5u)
+
+.subckt TL072_MACRO inp inn out vplus vminus
+* Single-pole finite-bandwidth op-amp macro with rail limiting.
+Eerr err 0 VALUE={V(inp)-V(inn)}
+Ggm 0 int VALUE={2e-5*V(err)}
+Rint int 0 1Meg
+Cint int 0 3.2n
+Bout out 0 V={min(max(V(int), V(vminus)+0.15), V(vplus)-0.15)}
+Rout out 0 10Meg
+.ends TL072_MACRO
+
+.save v(j2_tip) v(u2a_out) v(u2b_out) v(clip) v(u3b_out) v(treble_wiper) v(level_wiper) v(vout)
+
+.control
+set filetype=ascii
+op
+tran 1u 120m 0 1u
+wrdata /tmp/greybound_klon_centaur.dat v(j2_tip) v(u2a_out) v(u2b_out) v(clip) v(u3b_out) v(treble_wiper) v(level_wiper) v(vout)
+quit
+.endc
+
+.end

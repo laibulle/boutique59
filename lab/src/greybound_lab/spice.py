@@ -43,6 +43,23 @@ class CommonCathodeSpiceMetrics:
 
 
 @dataclass(frozen=True)
+class KlonCentaurSpiceMetrics:
+    input_rms_v: float
+    buffer_rms_v: float
+    clean_rms_v: float
+    drive_rms_v: float
+    clip_rms_v: float
+    mix_rms_v: float
+    tone_rms_v: float
+    output_rms_v: float
+    output_peak_v: float
+    output_gain: float
+    output_gain_db: float
+    clip_peak_v: float
+    clip_asymmetry_v: float
+
+
+@dataclass(frozen=True)
 class CommonCathodeDatasetCase:
     stimulus_id: str
     kind: str
@@ -60,6 +77,12 @@ FIXTURES = {
         netlist_path=Path("tests/fixtures/circuit/common_cathode_12ax7.cir"),
         tmp_data_path=Path("/tmp/greybound_common_cathode_12ax7.dat"),
         signals=("input", "grid", "plate", "cathode", "bplus"),
+    ),
+    "klon-centaur": SpiceFixture(
+        name="klon-centaur",
+        netlist_path=Path("tests/fixtures/circuit/klon_centaur.cir"),
+        tmp_data_path=Path("/tmp/greybound_klon_centaur.dat"),
+        signals=("input", "buffer", "clean", "drive", "clip", "mix", "tone", "output"),
     )
 }
 
@@ -82,6 +105,9 @@ def run_spice_fixture(name: str, output_dir: Path, repo_root: Path) -> tuple[Pat
     if fixture.name == "common-cathode-12ax7":
         metrics = common_cathode_metrics(trace)
         write_common_cathode_report(report_path, fixture, data_path, metrics)
+    elif fixture.name == "klon-centaur":
+        metrics = klon_centaur_metrics(trace)
+        write_klon_centaur_report(report_path, fixture, data_path, metrics)
     else:
         raise ValueError(f"no report writer for {fixture.name}")
     return data_path, report_path
@@ -627,6 +653,42 @@ def common_cathode_metrics(trace: SpiceTrace, settle_time_s: float = 0.050) -> C
     )
 
 
+def klon_centaur_metrics(trace: SpiceTrace, settle_time_s: float = 0.050) -> KlonCentaurSpiceMetrics:
+    mask = trace.time_s >= settle_time_s
+    if not np.any(mask):
+        raise ValueError("SPICE trace is too short for settled metrics")
+
+    input_ac = _remove_dc(trace.signals["input"][mask])
+    buffer_ac = _remove_dc(trace.signals["buffer"][mask])
+    clean_ac = _remove_dc(trace.signals["clean"][mask])
+    drive_ac = _remove_dc(trace.signals["drive"][mask])
+    clip_ac = _remove_dc(trace.signals["clip"][mask])
+    mix_ac = _remove_dc(trace.signals["mix"][mask])
+    tone_ac = _remove_dc(trace.signals["tone"][mask])
+    output_ac = _remove_dc(trace.signals["output"][mask])
+
+    input_rms = rms(input_ac)
+    output_rms = rms(output_ac)
+    clip_positive = float(np.max(clip_ac))
+    clip_negative = float(np.min(clip_ac))
+
+    return KlonCentaurSpiceMetrics(
+        input_rms_v=input_rms,
+        buffer_rms_v=rms(buffer_ac),
+        clean_rms_v=rms(clean_ac),
+        drive_rms_v=rms(drive_ac),
+        clip_rms_v=rms(clip_ac),
+        mix_rms_v=rms(mix_ac),
+        tone_rms_v=rms(tone_ac),
+        output_rms_v=output_rms,
+        output_peak_v=float(np.max(np.abs(output_ac))),
+        output_gain=output_rms / max(input_rms, 1.0e-12),
+        output_gain_db=linear_to_db(output_rms / max(input_rms, 1.0e-12)),
+        clip_peak_v=max(abs(clip_positive), abs(clip_negative)),
+        clip_asymmetry_v=clip_positive + clip_negative,
+    )
+
+
 def write_common_cathode_report(
     path: Path,
     fixture: SpiceFixture,
@@ -669,6 +731,62 @@ Metrics are computed after the first 50 ms to avoid startup bias.
 This is a cell-level electrical reference, not a full Greybound rig reference.
 Use it to validate the common-cathode stage before fitting or tuning higher-level
 amp behavior.
+""",
+        encoding="utf-8",
+    )
+
+
+def write_klon_centaur_report(
+    path: Path,
+    fixture: SpiceFixture,
+    data_path: Path,
+    metrics: KlonCentaurSpiceMetrics,
+) -> None:
+    path.write_text(
+        f"""# SPICE Fixture Report: {fixture.name}
+
+## Inputs
+
+- Netlist: `{fixture.netlist_path}`
+- Data: `{data_path}`
+- Source: ngspice batch run
+
+## Circuit Scope
+
+This fixture models the full Klon-style pedal path as a practical ngspice macro:
+input buffer, clean/drive split, non-inverting gain stage, antiparallel germanium
+clipping around Vref, passive tone/level shaping, output buffer, and high-Z load.
+The passive component values are sourced from the public Klon Centaur BOM. The
+TL072 stages are finite-gain, single-pole, rail-limited macros; replace them
+with a measured/vendor macromodel before treating output-level metrics as final.
+
+## Settled 1 kHz Transient
+
+Metrics are computed after the first 50 ms to avoid startup bias. All values are
+AC after DC removal around the 4.5 V bias point.
+
+| Metric | Value |
+| --- | ---: |
+| Input RMS | {metrics.input_rms_v * 1000.0:.3f} mV |
+| Buffer RMS | {metrics.buffer_rms_v * 1000.0:.3f} mV |
+| Clean path RMS | {metrics.clean_rms_v * 1000.0:.3f} mV |
+| Drive stage RMS | {metrics.drive_rms_v * 1000.0:.3f} mV |
+| Clip node RMS | {metrics.clip_rms_v * 1000.0:.3f} mV |
+| Mix node RMS | {metrics.mix_rms_v * 1000.0:.3f} mV |
+| Tone node RMS | {metrics.tone_rms_v * 1000.0:.3f} mV |
+| Output RMS | {metrics.output_rms_v * 1000.0:.3f} mV |
+| Output peak | {metrics.output_peak_v * 1000.0:.3f} mV |
+| Output gain | {metrics.output_gain:.2f}x |
+| Output gain | {metrics.output_gain_db:.2f} dB |
+| Clip peak | {metrics.clip_peak_v * 1000.0:.3f} mV |
+| Clip asymmetry | {metrics.clip_asymmetry_v * 1000.0:.3f} mV |
+
+## Engineering Notes
+
+Use this as a component-level reference before tuning the Minotaur Rust model.
+The next useful step is generating the same fixture across `GAIN`, `TREBLE`, and
+`LEVEL` parameter sweeps, then comparing those traces to Greybound pedal-only
+renders and the local NAM Klon references.
 """,
         encoding="utf-8",
     )

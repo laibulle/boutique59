@@ -15,7 +15,7 @@ from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export
 from greybound_lab.neural_cell import train_common_cathode_mlp
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import DEFAULT_IR_WAV, render_rig
-from greybound_lab.rig_sweep import run_amp_control_grid_sweep
+from greybound_lab.rig_sweep import run_amp_control_grid_sweep, sweep_score
 from greybound_lab.segments import load_segments
 from greybound_lab.spice import run_spice_fixture, write_spice_dataset
 from greybound_lab.stimuli import generate_stimuli
@@ -53,7 +53,7 @@ def main() -> None:
     stimuli.add_argument("--sample-rate", type=int, default=44_100)
 
     spice = subparsers.add_parser("spice-run", help="Run a supported SPICE fixture and write a lab report.")
-    spice.add_argument("--fixture", required=True, choices=["common-cathode-12ax7"])
+    spice.add_argument("--fixture", required=True, choices=["common-cathode-12ax7", "klon-centaur"])
     spice.add_argument("--output-dir", type=Path, default=Path("lab/references/spice"))
 
     spice_dataset = subparsers.add_parser(
@@ -468,13 +468,15 @@ def run_sweep_rig_vs_reference(args: argparse.Namespace) -> None:
         segments=load_segments(args.segments) if args.segments else None,
         max_lag_ms=args.max_lag_ms,
     )
-    best = min(points, key=lambda point: point.metrics.log_spectral_distance_db)
+    best = min(points, key=lambda point: sweep_score(point.metrics).total)
+    score = sweep_score(best.metrics)
     print(f"wrote {args.report}")
     print(f"wrote {args.metadata}")
     print(
         "best "
         + " ".join(f"{control}={value:.3f}" for control, value in best.values.items())
         + " "
+        f"score={score.total:.3f} "
         f"lsd={best.metrics.log_spectral_distance_db:.2f}dB "
         f"null={best.metrics.null_relative_db:.2f}dB"
     )

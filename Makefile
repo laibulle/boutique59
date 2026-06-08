@@ -35,13 +35,31 @@ NAM_RENDER_SECONDS ?= 20
 NAM_INPUT_DB ?= -70
 NAM_OUTPUT_DB ?= -12
 KLON_NAM_MODEL ?= lab/references/nam/J. Rockett _The Jeff_ Archer/Klon Gain 5.nam
+KLON_INPUT_DB ?= -36
+KLON_OUTPUT_DB ?= -12
 KLON_OUTPUT_WAV ?= lab/reports/klon-minotaur/klon-gain5.wav
 KLON_METADATA ?= lab/reports/klon-minotaur/klon-gain5.run.json
 MINOTAUR_PEDAL_RIG ?= rigs/minotaur-pedal-only.json5
+MINOTAUR_INPUT_DB ?= $(KLON_INPUT_DB)
+MINOTAUR_OUTPUT_DB ?= $(KLON_OUTPUT_DB)
 MINOTAUR_OUTPUT_WAV ?= lab/reports/klon-minotaur/minotaur-pedal-only.wav
 MINOTAUR_METADATA ?= lab/reports/klon-minotaur/minotaur-pedal-only.run.json
 MINOTAUR_KLON_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5.md
+MINOTAUR_KLON_SWEEP_DIR ?= lab/reports/klon-minotaur/sweep-gain5
+MINOTAUR_KLON_SWEEP_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5-sweep.md
+MINOTAUR_KLON_SWEEP_METADATA ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5-sweep.run.json
+MINOTAUR_SWEEP_GAIN ?= 0.25,0.42,0.60,0.78
+MINOTAUR_SWEEP_TREBLE ?= 0.40,0.55,0.70
+MINOTAUR_SWEEP_OUTPUT ?= 0.42,0.58,0.74
+KLON_SPICE_DIR ?= lab/references/spice/klon-centaur-jatinchowdhury18
+KLON_SPICE_ASC ?= $(KLON_SPICE_DIR)/GainStage2_zzz.asc
+KLON_SPICE_RUN_ASC ?= $(KLON_SPICE_DIR)/GainStage2_zzz.greybound.asc
+KLON_SPICE_SOURCE_URL ?= https://raw.githubusercontent.com/jatinchowdhury18/KlonCentaur/master/GainStageTraining/SPICE/GainStage2_zzz.asc
+KLON_SPICE_LICENSE_URL ?= https://raw.githubusercontent.com/jatinchowdhury18/KlonCentaur/master/LICENSE
+KLON_SPICE_README ?= $(KLON_SPICE_DIR)/README.md
+LTSPICE_BIN ?= /Applications/LTspice.app/Contents/MacOS/LTspice
 SPICE_FIXTURE ?= common-cathode-12ax7
+SPICE_OUTPUT_DIR ?= lab/references/spice
 SPICE_DATASET_DIR ?= lab/datasets/spice
 NEURAL_CELL ?= common-cathode-12ax7-mlp
 NEURAL_DATASET_MANIFEST ?= lab/datasets/spice/common-cathode-12ax7.dataset.json
@@ -193,8 +211,8 @@ lab-render-klon-nam:
 		--renderer-command "$(NAM_RENDERER)" \
 		--sample-rate "$(NAM_SAMPLE_RATE)" \
 		--render-seconds "$(NAM_RENDER_SECONDS)" \
-		--input-db "$(NAM_INPUT_DB)" \
-		--output-db "$(NAM_OUTPUT_DB)"
+		--input-db "$(KLON_INPUT_DB)" \
+		--output-db "$(KLON_OUTPUT_DB)"
 
 lab-render-minotaur-pedal: build
 	uv --project lab run greybound-lab render-rig \
@@ -206,8 +224,8 @@ lab-render-minotaur-pedal: build
 		--render-seconds "$(NAM_RENDER_SECONDS)" \
 		--sample-rate "$(NAM_SAMPLE_RATE)" \
 		--period-size "$(PERIOD_SIZE)" \
-		--input-db "$(NAM_INPUT_DB)" \
-		--output-db "$(NAM_OUTPUT_DB)" \
+		--input-db "$(MINOTAUR_INPUT_DB)" \
+		--output-db "$(MINOTAUR_OUTPUT_DB)" \
 		--disable-neural-cell
 
 lab-compare-minotaur-klon:
@@ -217,7 +235,55 @@ lab-compare-minotaur-klon:
 		--report "$(MINOTAUR_KLON_REPORT)" \
 		--metadata "$(MINOTAUR_METADATA)"
 
-lab-benchmark-minotaur-klon: lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon
+lab-sweep-minotaur-klon: lab-render-klon-nam build
+	uv --project lab run greybound-lab sweep-rig-vs-reference \
+		--rig "$(MINOTAUR_PEDAL_RIG)" \
+		--input-wav "$(NAM_INPUT_WAV)" \
+		--reference-wav "$(KLON_OUTPUT_WAV)" \
+		--binary "$(CLI)" \
+		--output-dir "$(MINOTAUR_KLON_SWEEP_DIR)" \
+		--report "$(MINOTAUR_KLON_SWEEP_REPORT)" \
+		--metadata "$(MINOTAUR_KLON_SWEEP_METADATA)" \
+		--render-seconds "$(NAM_RENDER_SECONDS)" \
+		--sample-rate "$(NAM_SAMPLE_RATE)" \
+		--period-size "$(PERIOD_SIZE)" \
+		--input-db "$(MINOTAUR_INPUT_DB)" \
+		--output-db "$(MINOTAUR_OUTPUT_DB)" \
+		--sweep gain="$(MINOTAUR_SWEEP_GAIN)" \
+		--sweep treble="$(MINOTAUR_SWEEP_TREBLE)" \
+		--sweep output="$(MINOTAUR_SWEEP_OUTPUT)"
+
+lab-benchmark-minotaur-klon: lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-sweep-minotaur-klon
+
+lab-fetch-klon-spice:
+	mkdir -p "$(KLON_SPICE_DIR)"
+	test -f "$(KLON_SPICE_ASC)" || curl -L "$(KLON_SPICE_SOURCE_URL)" -o "$(KLON_SPICE_ASC)"
+	test -f "$(KLON_SPICE_DIR)/LICENSE" || curl -L "$(KLON_SPICE_LICENSE_URL)" -o "$(KLON_SPICE_DIR)/LICENSE"
+	printf '%s\n' \
+		'# Klon Centaur LTspice Reference' \
+		'' \
+		'Source: https://github.com/jatinchowdhury18/KlonCentaur' \
+		'Fetched file: GainStageTraining/SPICE/GainStage2_zzz.asc' \
+		'License: BSD-3-Clause, copied to LICENSE in this directory.' \
+		'' \
+		'This is an LTspice `.asc` reference for the Klon gain stage used by the upstream project training scripts. It is not yet a Greybound ngspice dataset fixture.' \
+		> "$(KLON_SPICE_README)"
+
+lab-check-ltspice:
+	@test -x "$(LTSPICE_BIN)" || (echo "LTspice not found at LTSPICE_BIN=$(LTSPICE_BIN). Install LTspice or run with LTSPICE_BIN=/path/to/LTspice." >&2; exit 2)
+
+lab-prepare-klon-spice-ltspice: lab-fetch-klon-spice
+	cp "$(KLON_SPICE_ASC)" "$(KLON_SPICE_RUN_ASC)"
+	perl -0pi -e 's/^FLAG 0 0 Vout\n//m' "$(KLON_SPICE_RUN_ASC)"
+	printf '%s\n' 'TEXT -928 552 Left 2 !.tran 0.2\n.param fr=100 N=10 G=1.0 RVaTop=100000 RVaBot=1 RVbTop=100000 RVbBot=1\n.probe v(Vi) v(Vout)' >> "$(KLON_SPICE_RUN_ASC)"
+
+lab-run-klon-spice-ltspice: lab-prepare-klon-spice-ltspice lab-check-ltspice
+	cd "$(KLON_SPICE_DIR)" && "$(abspath $(LTSPICE_BIN))" -b "$(notdir $(KLON_SPICE_RUN_ASC))"
+
+lab-spice-run:
+	uv --project lab run greybound-lab spice-run \
+		--fixture "$(SPICE_FIXTURE)" \
+		--output-dir "$(SPICE_OUTPUT_DIR)"
 
 lab-spice-dataset:
 	uv --project lab run greybound-lab spice-dataset \
@@ -361,4 +427,4 @@ docs-deploy: docs-vercel-build
 
 vercel-deploy: web-deploy docs-deploy
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-benchmark-minotaur-klon lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-sweep-minotaur-klon lab-benchmark-minotaur-klon lab-fetch-klon-spice lab-check-ltspice lab-run-klon-spice-ltspice lab-spice-run lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy

@@ -1,0 +1,66 @@
+---
+title: Coupling And Bias
+description: Shared rules for coupling capacitors, bias networks, and blocking behavior.
+---
+
+Coupling and bias networks create memory that strongly affects recovery, feel, and inter-stage loading. Keep this state explicit.
+
+## Coupling Capacitors
+
+A coupling capacitor should be modeled at the boundary where it exists electrically. Document:
+
+- series capacitor value,
+- grid/base/input leak resistance,
+- source impedance,
+- downstream input impedance,
+- initial condition,
+- discharge path when bypassed or disconnected.
+
+The simple high-pass cutoff is only a first check. Large-signal behavior depends on bias shift and downstream nonlinear conduction.
+
+## Bias Networks
+
+Bias assumptions must be visible in the model plan:
+
+- fixed or cathode/emitter bias,
+- grid/base leak path,
+- cathode/emitter resistor and bypass capacitor,
+- supply voltage assumption,
+- expected DC operating point.
+
+When the true operating point is unknown, mark it as a measurement or SPICE requirement rather than hiding it in a gain constant.
+
+## Blocking Distortion
+
+Blocking behavior can occur when coupling capacitors charge under overload and shift the following device bias. It matters most in tube stages and high-gain cascades.
+
+Model it when the target behavior includes:
+
+- slow recovery after hard transients,
+- low-frequency compression or choking,
+- asymmetric recovery,
+- audible dependence on coupling-capacitor values.
+
+At minimum, add validation stimuli with low-frequency bursts and high-amplitude transients when blocking behavior is in scope.
+
+## Bypass Capacitors
+
+Cathode and emitter bypass capacitors alter gain and introduce memory. Keep their state separate from static gain.
+
+Document:
+
+- bypass capacitor value,
+- resistor path,
+- sample-rate discretization,
+- effect on small-signal gain,
+- overload recovery behavior.
+
+## Tests
+
+Coupling and bias tests should cover:
+
+- DC settling from cold state,
+- silence after overload,
+- low-frequency sine response,
+- burst recovery,
+- control changes that alter discharge paths.

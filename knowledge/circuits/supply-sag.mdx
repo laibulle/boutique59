@@ -1,0 +1,53 @@
+---
+title: Supply Sag
+description: Shared modeling notes for rail compression, rectifier behavior, and power-supply memory.
+---
+
+Supply sag is shared circuit state, not a hidden output compressor. Model it only when the target circuit behavior depends on supply impedance, rectifier behavior, or reservoir-capacitor recovery.
+
+## Model Boundaries
+
+Document which stages draw from the sagging rail and which remain fixed. A useful sag model identifies:
+
+- nominal supply voltage,
+- effective supply resistance or rectifier drop,
+- reservoir/filter capacitance,
+- load current proxy or solved current,
+- recovery time constants,
+- modulation targets inside the audio circuit.
+
+If the rail state is driven by an audio envelope proxy, state that it is an approximation and validate it against hardware or SPICE behavior.
+
+## Rectifier And Filtering
+
+Tube rectifiers, solid-state rectifiers, and simplified supply resistances should not be treated as interchangeable unless the model target only needs broad compression.
+
+Document:
+
+- rectifier type or approximation,
+- reservoir capacitance,
+- series resistance,
+- downstream filter nodes,
+- whether screen or preamp rails sag independently.
+
+## Interaction With Power Stages
+
+Sag should modulate physical parameters where possible:
+
+- available plate/screen voltage,
+- headroom,
+- bias/current behavior,
+- negative-feedback loop behavior when applicable.
+
+Avoid adding a post-output gain duck unless it has been validated as perceptually and electrically sufficient for the model tier.
+
+## Validation Stimuli
+
+Use deterministic stimuli that reveal memory:
+
+- sustained low notes,
+- loud chord bursts followed by silence,
+- step changes in drive level,
+- repeated transients at different rates.
+
+Track rail state, output RMS, harmonic changes, and recovery time. Audio fixtures should include both clean and driven settings when the model exposes sag controls.

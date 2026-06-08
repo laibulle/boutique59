@@ -1,0 +1,76 @@
+---
+title: Nonlinear Solvers
+description: Shared solver rules for diodes, BJTs, tubes, and other nonlinear circuit cells.
+---
+
+Nonlinear circuit behavior should be solved where the nonlinearity interacts with surrounding impedance. A generic waveshaper is only appropriate when the circuit interaction is not material or has been validated as an equivalent.
+
+## Default Solver Shape
+
+Use small bounded Newton iterations for scalar and low-dimensional nonlinear cells:
+
+- start from the previous sample's solution,
+- limit iteration count,
+- clamp exponential arguments,
+- bound voltage/current updates,
+- provide a deterministic fallback if convergence fails,
+- expose convergence counters in debug or lab builds when useful.
+
+For audio-rate code, avoid heap allocation and data-dependent unbounded loops.
+
+## Diode Clipping
+
+Diode pairs should include the surrounding source impedance, series resistance, bias path, and capacitive state when those elements affect clipping threshold or recovery.
+
+Document:
+
+- diode equation or approximation,
+- thermal voltage and emission coefficient assumptions,
+- forward voltage confidence,
+- symmetric or asymmetric device configuration,
+- coupling with tone or feedback networks.
+
+Lookup tables or polynomial approximations are acceptable after comparison against the reference equation over the expected voltage range.
+
+## BJT Cells
+
+BJT stages should preserve operating-point behavior, gain dependence on collector/emitter networks, coupling capacitors, and feedback paths.
+
+Document:
+
+- topology and transistor orientation,
+- collector, base, and emitter network values,
+- beta or transconductance assumption,
+- bias point,
+- nonlinear relation used for base-emitter behavior,
+- source and load impedance.
+
+When exact device data is unavailable, state the placeholder parameter and validate the audible sensitivity before treating it as a stable project value.
+
+## Tube Cells
+
+Tube stages should preserve asymmetric transfer, bias shift, cathode memory, and loading. Compact triode equations are acceptable when their parameter ranges are documented.
+
+Document:
+
+- triode type and model family,
+- plate, grid, and cathode networks,
+- plate supply assumption,
+- cathode bypass state,
+- coupling-capacitor state,
+- downstream load and tone-stack interaction.
+
+For cathode followers and phase inverters, validate both signal transfer and output impedance behavior because their main role is often driving another network.
+
+## Solver Validation
+
+Every nonlinear solver should have tests for:
+
+- silence and denormal-safe decay,
+- small-signal gain around the operating point,
+- overload recovery,
+- DC bias stability,
+- harmonic profile at representative input levels,
+- behavior at sample rates used by the product.
+
+When SPICE is available, compare node voltages and branch currents before comparing final audio.

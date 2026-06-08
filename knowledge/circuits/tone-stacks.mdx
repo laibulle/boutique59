@@ -1,0 +1,60 @@
+---
+title: Tone Stacks
+description: Reusable modeling rules for passive and active tone-control networks.
+---
+
+Tone stacks are interactive impedance networks. Treat them as circuit cells unless measurements show that a simpler filter bank is equivalent for the target use.
+
+## Passive Stack Rules
+
+Passive tone stacks should include:
+
+- source impedance from the driving stage,
+- downstream load impedance,
+- all tone capacitors and resistors,
+- potentiometers as split resistors,
+- taper mapping or documented taper assumption,
+- insertion loss.
+
+Do not normalize away insertion loss unless the surrounding amplifier stage includes the real makeup gain.
+
+## Common Topologies
+
+Fender/Marshall-style three-knob stacks:
+
+- slope resistor and treble capacitor dominate mid/treble interaction,
+- bass and mid controls strongly affect insertion loss,
+- source impedance matters, especially when driven by a cathode follower.
+
+Vox/Top Boost-style stacks:
+
+- treble and bass controls interact through a small passive network,
+- upstream cathode-follower or plate-source impedance changes response,
+- downstream loading changes level and high-frequency shape.
+
+Muffin-style blend tone networks:
+
+- low-pass and high-pass branches should be solved as one loaded blend,
+- blend pot position changes both level and effective frequency response,
+- recovery-stage input load is part of the cell.
+
+## Implementation Preference
+
+Use MNA for interactive passive tone stacks. A state-space or biquad approximation can be used only after fitting and validating:
+
+- control endpoints,
+- mid control positions,
+- source/load variants,
+- insertion loss,
+- phase response when it affects downstream clipping or feedback.
+
+## Validation Sweeps
+
+For each tone stack, keep reference AC sweeps for:
+
+- all controls minimum, noon, maximum,
+- each control swept while others are fixed,
+- realistic source/load values,
+- at least 44.1 kHz and 48 kHz discrete implementations when product builds support both.
+
+Rust fixtures should compare magnitude at fixed frequencies and reject unstable or singular control positions.

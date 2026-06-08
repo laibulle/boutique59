@@ -1,0 +1,36 @@
+{
+  // Pedal-only diagnostic rig for Klon/Minotaur NAM comparisons.
+  // The amp is bypassed so the rendered output is the Minotaur pedal output.
+  name: 'minotaur-pedal-only',
+
+  chain: {
+    cable_capacitance_pf: 470,
+  },
+
+  pre_amp: [
+    {
+      id: 'overdrive',
+      device: 'minotaur',
+      bypassed: false,
+      controls: {
+        gain: 0.42,
+        treble: 0.61,
+        output: 0.58,
+      },
+    },
+  ],
+
+  amp: {
+    model: 'nox30',
+    bypassed: true,
+    controls: {
+      volume: 0.58,
+      bass: 0.54,
+      treble: 0.59,
+      cut: 0.43,
+      drive: 0.20,
+      presence: 0.35,
+      sag: 0.45,
+    },
+  },
+}

@@ -1,8 +1,8 @@
-DEVICE ?= Scarlett 18i8 USB
+#DEVICE ?= Scarlett 18i8 USB
 #DEVICE ?= Écouteurs externes
 #DEVICE ?= Haut-parleurs MacBook Air
 #DEVICE ?= AirPods Pro de Guillaume
-#DEVICE ?= WH-1000XM5
+DEVICE ?= WH-1000XM5
 INPUT_CHANNEL ?= 1
 OUTPUT_CHANNELS ?= 1,2
 SAMPLE_RATE ?= 48000
@@ -34,6 +34,13 @@ NAM_SAMPLE_RATE ?= 48000
 NAM_RENDER_SECONDS ?= 20
 NAM_INPUT_DB ?= -70
 NAM_OUTPUT_DB ?= -12
+KLON_NAM_MODEL ?= lab/references/nam/J. Rockett _The Jeff_ Archer/Klon Gain 5.nam
+KLON_OUTPUT_WAV ?= lab/reports/klon-minotaur/klon-gain5.wav
+KLON_METADATA ?= lab/reports/klon-minotaur/klon-gain5.run.json
+MINOTAUR_PEDAL_RIG ?= rigs/minotaur-pedal-only.json5
+MINOTAUR_OUTPUT_WAV ?= lab/reports/klon-minotaur/minotaur-pedal-only.wav
+MINOTAUR_METADATA ?= lab/reports/klon-minotaur/minotaur-pedal-only.run.json
+MINOTAUR_KLON_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5.md
 SPICE_FIXTURE ?= common-cathode-12ax7
 SPICE_DATASET_DIR ?= lab/datasets/spice
 NEURAL_CELL ?= common-cathode-12ax7-mlp
@@ -175,6 +182,42 @@ lab-render-nam:
 		--render-seconds "$(NAM_RENDER_SECONDS)" \
 		--input-db "$(NAM_INPUT_DB)" \
 		--output-db "$(NAM_OUTPUT_DB)"
+
+lab-render-klon-nam:
+	@test -n "$(NAM_RENDERER)" || (echo "NAM_RENDERER is required. It must accept placeholders: {model}, {input_wav}, {output_wav}, {sample_rate}, {render_seconds}, {ir_wav}." >&2; exit 2)
+	uv --project lab run greybound-lab render-nam \
+		--model "$(KLON_NAM_MODEL)" \
+		--input-wav "$(NAM_INPUT_WAV)" \
+		--output-wav "$(KLON_OUTPUT_WAV)" \
+		--metadata "$(KLON_METADATA)" \
+		--renderer-command "$(NAM_RENDERER)" \
+		--sample-rate "$(NAM_SAMPLE_RATE)" \
+		--render-seconds "$(NAM_RENDER_SECONDS)" \
+		--input-db "$(NAM_INPUT_DB)" \
+		--output-db "$(NAM_OUTPUT_DB)"
+
+lab-render-minotaur-pedal: build
+	uv --project lab run greybound-lab render-rig \
+		--rig "$(MINOTAUR_PEDAL_RIG)" \
+		--input-wav "$(NAM_INPUT_WAV)" \
+		--output-wav "$(MINOTAUR_OUTPUT_WAV)" \
+		--metadata "$(MINOTAUR_METADATA)" \
+		--binary "$(CLI)" \
+		--render-seconds "$(NAM_RENDER_SECONDS)" \
+		--sample-rate "$(NAM_SAMPLE_RATE)" \
+		--period-size "$(PERIOD_SIZE)" \
+		--input-db "$(NAM_INPUT_DB)" \
+		--output-db "$(NAM_OUTPUT_DB)" \
+		--disable-neural-cell
+
+lab-compare-minotaur-klon:
+	uv --project lab run greybound-lab compare-wav \
+		--candidate "$(MINOTAUR_OUTPUT_WAV)" \
+		--reference "$(KLON_OUTPUT_WAV)" \
+		--report "$(MINOTAUR_KLON_REPORT)" \
+		--metadata "$(MINOTAUR_METADATA)"
+
+lab-benchmark-minotaur-klon: lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon
 
 lab-spice-dataset:
 	uv --project lab run greybound-lab spice-dataset \
@@ -318,4 +361,4 @@ docs-deploy: docs-vercel-build
 
 vercel-deploy: web-deploy docs-deploy
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-benchmark-minotaur-klon lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy

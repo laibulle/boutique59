@@ -112,7 +112,7 @@ function preset(id: string, overrides: PresetOverrides): RigPreset {
   };
 }
 
-export const rigPresets: RigPreset[] = [
+const allRigPresets: RigPreset[] = [
   preset("nox30-clean", {}),
   preset("nox30-edge", { amp: { volume: 0.54, drive: 0.2, cut: 0.38 } }),
   preset("nox30-driven", { amp: { volume: 0.7, drive: 0.45, sag: 0.42 } }),
@@ -173,6 +173,8 @@ export const rigPresets: RigPreset[] = [
     pedals: [pedal("springfield", "post", { dwell: 0.4, tone: 0.52, mix: 0.28 })],
   }),
 ];
+
+export const rigPresets: RigPreset[] = allRigPresets.filter((preset) => preset.id === "minotaur-nox30");
 
 export type RuntimeConfig = {
   device: string;

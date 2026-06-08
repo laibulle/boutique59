@@ -125,7 +125,7 @@ export const rigPresets: RigPreset[] = [
       { ...pedal("tron", "pre", { rate_hz: 0.68, depth: 0.9, feedback: 0.62, mix: 0.82 }), bypassed: true },
       { ...pedal("jetstream", "pre", { manual: 0.44, rate_hz: 0.32, depth: 0.78, feedback: 0.52, mix: 0.62 }), bypassed: true },
       { ...pedal("muffin", "pre", { sustain: 0.7, tone: 0.46, level: 0.45 }), bypassed: true },
-      { ...pedal("minotaur", "pre", { gain: 0.42, treble: 0.61, output: 0.58 }), bypassed: true },
+      { ...pedal("minotaur", "pre", { gain: 0.42, treble: 0.70, output: 0.42 }), bypassed: true },
       { ...pedal("monarch", "pre", { gain: 0.48, tone: 0.57, output: 0.62 }), bypassed: true },
       { ...pedal("godess-one", "pre", { distortion: 0.64, tone: 0.47, level: 0.52, mode: "custom" }), bypassed: true },
       { ...pedal("celeste", "fx", { rate_hz: 0.72, depth: 0.72, tone: 0.58, mix: 0.48 }), bypassed: true },
@@ -146,7 +146,7 @@ export const rigPresets: RigPreset[] = [
     amp: { volume: 0.36, drive: 0.18 },
   }),
   preset("minotaur-nox30", {
-    pedals: [pedal("minotaur", "pre", { gain: 0.32, treble: 0.56, output: 0.66 })],
+    pedals: [pedal("minotaur", "pre", { gain: 0.42, treble: 0.70, output: 0.42 })],
   }),
   preset("monarch-nox30", {
     pedals: [pedal("monarch", "pre", { gain: 0.46, tone: 0.53, output: 0.62 })],

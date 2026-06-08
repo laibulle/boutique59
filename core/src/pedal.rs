@@ -113,9 +113,9 @@ pub struct MinotaurControls {
 impl Default for MinotaurControls {
     fn default() -> Self {
         Self {
-            gain: 0.35,
-            treble: 0.55,
-            output: 0.55,
+            gain: 0.42,
+            treble: 0.70,
+            output: 0.42,
         }
     }
 }
@@ -608,7 +608,7 @@ impl Minotaur {
         let high = self.treble_highpass.process(sum_node);
         let tone_gain = 0.78 + treble * 0.44;
         let voiced = low * (0.92 - treble * 0.38) + high * (0.18 + treble * 1.15);
-        let level = 0.22 + output * 1.95;
+        let level = (0.22 + output * 1.95) * 0.04;
         let final_output = self
             .output_lowpass
             .process(self.level_highpass.process(voiced * tone_gain * level))
@@ -1744,7 +1744,7 @@ mod tests {
     }
 
     #[test]
-    fn minotaur_reference_setting_has_klon_like_makeup_gain() {
+    fn minotaur_reference_setting_has_nam_anchored_makeup_gain() {
         let mut pedal = Minotaur::new(48_000.0);
         let mut input_sum = 0.0;
         let mut output_sum = 0.0;
@@ -1773,7 +1773,7 @@ mod tests {
         let gain = output_rms / input_rms;
 
         assert!(
-            (7.0..18.0).contains(&gain),
+            (0.25..0.80).contains(&gain),
             "input_rms={input_rms}, output_rms={output_rms}, gain={gain}"
         );
     }

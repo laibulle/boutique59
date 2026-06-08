@@ -13,8 +13,8 @@
       bypassed: false,
       controls: {
         gain: 0.42,
-        treble: 0.61,
-        output: 0.58,
+        treble: 0.70,
+        output: 0.42,
       },
     },
   ],

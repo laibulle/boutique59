@@ -8,6 +8,7 @@ import numpy as np
 from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export_neural_cell_vectors
 from greybound_lab.neural_cell import infer_artifact_numpy, infer_mlp_numpy
 from greybound_lab.neural_cell import build_mlp_descriptor, PreparedDataset, PreparedSplit
+from greybound_lab.neural_cell import prepare_klon_drive_clip_tone_dataset
 from greybound_lab.neural_cell import read_mlp_weights, write_mlp_weights
 
 
@@ -245,3 +246,45 @@ def test_evaluate_neural_cell_against_spice_writes_report(tmp_path: Path) -> Non
     assert "Neural Cell SPICE Evaluation" in report
     assert "`case_a`" in report
     assert "0.000 mV" in report
+
+
+def test_prepare_klon_drive_clip_tone_dataset_adds_controls_and_history(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "klon.dataset.npz"
+    manifest_path = tmp_path / "klon.dataset.json"
+    np.savez(
+        dataset_path,
+        train_a__buffer_ac_v=np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float32),
+        train_a__clip_ac_v=np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float32),
+        train_a__tone_ac_v=np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float32),
+        validation_a__buffer_ac_v=np.array([0.4, 0.5], dtype=np.float32),
+        validation_a__clip_ac_v=np.array([4.0, 5.0], dtype=np.float32),
+        validation_a__tone_ac_v=np.array([4.0, 5.0], dtype=np.float32),
+        test_a__buffer_ac_v=np.array([0.6, 0.7], dtype=np.float32),
+        test_a__clip_ac_v=np.array([6.0, 7.0], dtype=np.float32),
+        test_a__tone_ac_v=np.array([6.0, 7.0], dtype=np.float32),
+    )
+    manifest = {
+        "sample_rate_hz": 500000,
+        "splits": {"train": ["train_a"], "validation": ["validation_a"], "test": ["test_a"]},
+        "stimuli": [
+            {"id": "train_a", "kind": "sine", "parameters": {"gain": 0.25, "treble": 0.60, "level": 0.70}},
+            {"id": "validation_a", "kind": "sine", "parameters": {"gain": 0.55, "treble": 0.30, "level": 0.70}},
+            {"id": "test_a", "kind": "sine", "parameters": {"gain": 0.80, "treble": 0.85, "level": 0.70}},
+        ],
+        "artifacts": [{"kind": "output", "path": str(dataset_path)}],
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    prepared = prepare_klon_drive_clip_tone_dataset(
+        manifest_path,
+        target="clip_ac_v",
+        stride=1,
+        history_samples=2,
+    )
+
+    assert prepared.input_ids == ["buffer_ac_v", "buffer_ac_v_t-1", "gain"]
+    assert prepared.output_id == "clip_ac_v"
+    assert prepared.train.x.shape == (4, 3)
+    assert prepared.train.y.shape == (4, 1)
+    raw_first = prepared.train.x[0] * prepared.input_std + prepared.input_mean
+    np.testing.assert_allclose(raw_first, np.array([0.0, 0.0, 0.25], dtype=np.float32))

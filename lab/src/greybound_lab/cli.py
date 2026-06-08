@@ -8,11 +8,12 @@ from greybound_lab.external_inputs import download_tone3000_inputs, download_ton
 from greybound_lab.graybox_cell import fit_common_cathode_graybox
 from greybound_lab.integrated_neural import evaluate_integrated_neural_cell
 from greybound_lab.metrics import compare_signals
+from greybound_lab.minotaur import write_minotaur_klon_triage
 from greybound_lab.nam import write_nam_pack_manifest
 from greybound_lab.nam_render import render_nam
 from greybound_lab.neural_blend import parse_alpha_csv, run_neural_blend_sweep
 from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export_neural_cell_vectors
-from greybound_lab.neural_cell import train_common_cathode_mlp
+from greybound_lab.neural_cell import train_common_cathode_mlp, train_klon_drive_clip_tone_mlp
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import DEFAULT_IR_WAV, render_rig
 from greybound_lab.rig_sweep import run_amp_control_grid_sweep, sweep_score
@@ -60,16 +61,17 @@ def main() -> None:
         "spice-dataset",
         help="Run a supported SPICE fixture and write a dataset artifact plus manifest.",
     )
-    spice_dataset.add_argument("--fixture", required=True, choices=["common-cathode-12ax7"])
+    spice_dataset.add_argument("--fixture", required=True, choices=["common-cathode-12ax7", "klon-centaur"])
     spice_dataset.add_argument("--output-dir", type=Path, default=Path("lab/datasets/spice"))
 
     train_cell = subparsers.add_parser(
         "train-neural-cell",
         help="Train an experimental neural-cell model from a SPICE dataset manifest.",
     )
-    train_cell.add_argument("--cell", required=True, choices=["common-cathode-12ax7-mlp"])
+    train_cell.add_argument("--cell", required=True, choices=["common-cathode-12ax7-mlp", "klon-drive-clip-tone-mlp"])
     train_cell.add_argument("--dataset-manifest", required=True, type=Path)
     train_cell.add_argument("--output-dir", type=Path, default=Path("lab/models/common-cathode-12ax7-mlp-current"))
+    train_cell.add_argument("--target", default="tone_ac_v")
     train_cell.add_argument("--epochs", type=int, default=1200)
     train_cell.add_argument("--hidden-size", type=int, default=32)
     train_cell.add_argument("--learning-rate", type=float, default=5.0e-4)
@@ -216,6 +218,19 @@ def main() -> None:
     blend_sweep.add_argument("--segments", type=Path)
     blend_sweep.add_argument("--max-lag-ms", type=float, default=100.0)
 
+    minotaur_triage = subparsers.add_parser(
+        "minotaur-klon-triage",
+        help="Write a SPICE/NAM/Rust triage report for the Minotaur/Klon pedal model.",
+    )
+    minotaur_triage.add_argument("--spice-data", type=Path, default=Path("lab/references/spice/klon-centaur.dat"))
+    minotaur_triage.add_argument("--candidate-wav", required=True, type=Path)
+    minotaur_triage.add_argument("--reference-wav", required=True, type=Path)
+    minotaur_triage.add_argument("--report", type=Path, default=Path("lab/reports/klon-minotaur/minotaur-klon-triage.md"))
+    minotaur_triage.add_argument("--metadata", type=Path)
+    minotaur_triage.add_argument("--sweep-report", type=Path)
+    minotaur_triage.add_argument("--segments", type=Path)
+    minotaur_triage.add_argument("--max-lag-ms", type=float, default=100.0)
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -249,6 +264,8 @@ def main() -> None:
         run_sweep_rig_vs_reference(args)
     elif args.command == "sweep-neural-blend":
         run_sweep_neural_blend(args)
+    elif args.command == "minotaur-klon-triage":
+        run_minotaur_klon_triage(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -318,6 +335,23 @@ def run_spice_dataset(args: argparse.Namespace) -> None:
 
 
 def run_train_neural_cell(args: argparse.Namespace) -> None:
+    if args.cell == "klon-drive-clip-tone-mlp":
+        descriptor_path, weights_path, report_path = train_klon_drive_clip_tone_mlp(
+            manifest_path=args.dataset_manifest,
+            output_dir=args.output_dir,
+            repo_root=Path.cwd(),
+            target=args.target,
+            epochs=args.epochs,
+            hidden_size=args.hidden_size,
+            learning_rate=args.learning_rate,
+            stride=args.stride,
+            history_samples=args.history_samples,
+            seed=args.seed,
+        )
+        print(f"wrote {descriptor_path}")
+        print(f"wrote {weights_path}")
+        print(f"wrote {report_path}")
+        return
     if args.cell != "common-cathode-12ax7-mlp":
         raise SystemExit(f"unsupported neural cell {args.cell}")
     descriptor_path, weights_path, report_path = train_common_cathode_mlp(
@@ -502,6 +536,23 @@ def run_sweep_neural_blend(args: argparse.Namespace) -> None:
     print(f"wrote {args.report}")
     print(f"wrote {args.metadata}")
     print(f"best alpha={best.alpha:.3f} score={best.score.total:.4f}")
+
+
+def run_minotaur_klon_triage(args: argparse.Namespace) -> None:
+    write_minotaur_klon_triage(
+        repo_root=Path.cwd(),
+        spice_data=args.spice_data,
+        candidate_wav=args.candidate_wav,
+        reference_wav=args.reference_wav,
+        report=args.report,
+        metadata=args.metadata,
+        sweep_report=args.sweep_report,
+        segments=load_segments(args.segments) if args.segments else None,
+        max_lag_ms=args.max_lag_ms,
+    )
+    print(f"wrote {args.report}")
+    if args.metadata:
+        print(f"wrote {args.metadata}")
 
 
 def parse_sweep_specs(sweep_specs: list[str] | None, control: str, values: str | None) -> dict[str, list[float]]:

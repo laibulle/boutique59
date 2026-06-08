@@ -48,6 +48,8 @@ MINOTAUR_KLON_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5.md
 MINOTAUR_KLON_SWEEP_DIR ?= lab/reports/klon-minotaur/sweep-gain5
 MINOTAUR_KLON_SWEEP_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5-sweep.md
 MINOTAUR_KLON_SWEEP_METADATA ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5-sweep.run.json
+MINOTAUR_KLON_TRIAGE_REPORT ?= lab/reports/klon-minotaur/minotaur-klon-triage.md
+MINOTAUR_KLON_TRIAGE_METADATA ?= lab/reports/klon-minotaur/minotaur-klon-triage.run.json
 MINOTAUR_SWEEP_GAIN ?= 0.25,0.42,0.60,0.78
 MINOTAUR_SWEEP_TREBLE ?= 0.40,0.55,0.70
 MINOTAUR_SWEEP_OUTPUT ?= 0.42,0.58,0.74
@@ -61,6 +63,12 @@ LTSPICE_BIN ?= /Applications/LTspice.app/Contents/MacOS/LTspice
 SPICE_FIXTURE ?= common-cathode-12ax7
 SPICE_OUTPUT_DIR ?= lab/references/spice
 SPICE_DATASET_DIR ?= lab/datasets/spice
+KLON_SPICE_DATASET_DIR ?= lab/datasets/spice/klon-centaur
+KLON_NEURAL_TARGET ?= clip_ac_v
+KLON_NEURAL_OUTPUT_DIR ?= lab/models/klon-clip-mlp-current
+KLON_NEURAL_DATASET_MANIFEST ?= $(KLON_SPICE_DATASET_DIR)/klon-centaur.dataset.json
+KLON_NEURAL_HISTORY_SAMPLES ?= 4
+KLON_NEURAL_HIDDEN_SIZE ?= 48
 NEURAL_CELL ?= common-cathode-12ax7-mlp
 NEURAL_DATASET_MANIFEST ?= lab/datasets/spice/common-cathode-12ax7.dataset.json
 NEURAL_OUTPUT_DIR ?= lab/models/common-cathode-12ax7-mlp-current
@@ -255,6 +263,20 @@ lab-sweep-minotaur-klon: lab-render-klon-nam build
 
 lab-benchmark-minotaur-klon: lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-sweep-minotaur-klon
 
+lab-spice-klon:
+	uv --project lab run greybound-lab spice-run \
+		--fixture klon-centaur \
+		--output-dir "$(SPICE_OUTPUT_DIR)"
+
+lab-triage-minotaur-klon: lab-spice-klon lab-benchmark-minotaur-klon
+	uv --project lab run greybound-lab minotaur-klon-triage \
+		--spice-data "$(SPICE_OUTPUT_DIR)/klon-centaur.dat" \
+		--candidate-wav "$(MINOTAUR_OUTPUT_WAV)" \
+		--reference-wav "$(KLON_OUTPUT_WAV)" \
+		--report "$(MINOTAUR_KLON_TRIAGE_REPORT)" \
+		--metadata "$(MINOTAUR_KLON_TRIAGE_METADATA)" \
+		--sweep-report "$(MINOTAUR_KLON_SWEEP_REPORT)"
+
 lab-fetch-klon-spice:
 	mkdir -p "$(KLON_SPICE_DIR)"
 	test -f "$(KLON_SPICE_ASC)" || curl -L "$(KLON_SPICE_SOURCE_URL)" -o "$(KLON_SPICE_ASC)"
@@ -290,6 +312,11 @@ lab-spice-dataset:
 		--fixture "$(SPICE_FIXTURE)" \
 		--output-dir "$(SPICE_DATASET_DIR)"
 
+lab-spice-klon-dataset:
+	uv --project lab run greybound-lab spice-dataset \
+		--fixture klon-centaur \
+		--output-dir "$(KLON_SPICE_DATASET_DIR)"
+
 lab-train-neural-cell:
 	uv --project lab run --with torch greybound-lab train-neural-cell \
 		--cell "$(NEURAL_CELL)" \
@@ -300,6 +327,18 @@ lab-train-neural-cell:
 		--learning-rate "$(NEURAL_LEARNING_RATE)" \
 		--stride "$(NEURAL_STRIDE)" \
 		--history-samples "$(NEURAL_HISTORY_SAMPLES)"
+
+lab-train-klon-neural-cell:
+	uv --project lab run --with torch greybound-lab train-neural-cell \
+		--cell klon-drive-clip-tone-mlp \
+		--dataset-manifest "$(KLON_NEURAL_DATASET_MANIFEST)" \
+		--output-dir "$(KLON_NEURAL_OUTPUT_DIR)" \
+		--target "$(KLON_NEURAL_TARGET)" \
+		--epochs "$(NEURAL_EPOCHS)" \
+		--hidden-size "$(KLON_NEURAL_HIDDEN_SIZE)" \
+		--learning-rate "$(NEURAL_LEARNING_RATE)" \
+		--stride "$(NEURAL_STRIDE)" \
+		--history-samples "$(KLON_NEURAL_HISTORY_SAMPLES)"
 
 lab-fit-graybox-cell:
 	uv --project lab run --with torch greybound-lab fit-graybox-cell \
@@ -427,4 +466,4 @@ docs-deploy: docs-vercel-build
 
 vercel-deploy: web-deploy docs-deploy
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-sweep-minotaur-klon lab-benchmark-minotaur-klon lab-fetch-klon-spice lab-check-ltspice lab-run-klon-spice-ltspice lab-spice-run lab-spice-dataset lab-train-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-render-klon-nam lab-render-minotaur-pedal lab-compare-minotaur-klon lab-sweep-minotaur-klon lab-benchmark-minotaur-klon lab-spice-klon lab-triage-minotaur-klon lab-fetch-klon-spice lab-check-ltspice lab-run-klon-spice-ltspice lab-spice-run lab-spice-dataset lab-spice-klon-dataset lab-train-neural-cell lab-train-klon-neural-cell lab-fit-graybox-cell lab-evaluate-graybox-cell-rust lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-evaluate-integrated-graybox-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy

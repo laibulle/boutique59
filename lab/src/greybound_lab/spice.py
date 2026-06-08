@@ -4,7 +4,7 @@ import hashlib
 import json
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -71,6 +71,20 @@ class CommonCathodeDatasetCase:
     transient_step_s: float = 1.0e-6
 
 
+@dataclass(frozen=True)
+class KlonCentaurDatasetCase:
+    stimulus_id: str
+    kind: str
+    expression: str
+    parameters: dict[str, float | str]
+    split: str
+    gain: float
+    treble: float
+    level: float = 0.70
+    transient_stop_s: float = 0.120
+    transient_step_s: float = 2.0e-6
+
+
 FIXTURES = {
     "common-cathode-12ax7": SpiceFixture(
         name="common-cathode-12ax7",
@@ -122,6 +136,8 @@ def write_spice_dataset(
     if fixture is None:
         supported = ", ".join(sorted(FIXTURES))
         raise ValueError(f"unknown SPICE fixture {name!r}; supported fixtures: {supported}")
+    if fixture.name == "klon-centaur":
+        return write_klon_centaur_dataset(fixture, output_dir, repo_root)
     if fixture.name != "common-cathode-12ax7":
         raise ValueError(f"no dataset writer for {fixture.name}")
 
@@ -181,6 +197,221 @@ def write_spice_dataset(
     )
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return dataset_path, manifest_path
+
+
+def write_klon_centaur_dataset(
+    fixture: SpiceFixture,
+    output_dir: Path,
+    repo_root: Path,
+) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    netlist_dir = output_dir / "netlists"
+    trace_dir = output_dir / "traces"
+    netlist_dir.mkdir(parents=True, exist_ok=True)
+    trace_dir.mkdir(parents=True, exist_ok=True)
+
+    cases = klon_centaur_dataset_cases()
+    traces: dict[str, SpiceTrace] = {}
+    raw_paths: dict[str, Path] = {}
+    netlist_paths: dict[str, Path] = {}
+    source_netlist = (repo_root / fixture.netlist_path).read_text(encoding="utf-8")
+    for case in cases:
+        netlist_path = netlist_dir / f"{case.stimulus_id}.cir"
+        raw_path = trace_dir / f"{case.stimulus_id}.dat"
+        netlist_path.write_text(
+            klon_centaur_generated_netlist(source_netlist, case, raw_path),
+            encoding="utf-8",
+        )
+        subprocess.run(["ngspice", "-b", str(netlist_path)], cwd=repo_root, check=True)
+        if not raw_path.exists():
+            raise FileNotFoundError(f"SPICE did not produce {raw_path}")
+        raw_paths[case.stimulus_id] = raw_path
+        netlist_paths[case.stimulus_id] = netlist_path
+        traces[case.stimulus_id] = parse_wrdata(raw_path, fixture.signals)
+
+    reference_case = "sine_1khz_120mv_gain55_treble60"
+    metrics = klon_centaur_metrics(traces[reference_case])
+    dataset_path = output_dir / f"{fixture.name}.dataset.npz"
+    manifest_path = output_dir / f"{fixture.name}.dataset.json"
+    report_path = output_dir / f"{fixture.name}.dataset.md"
+
+    arrays = {}
+    for stimulus_id, case_trace in traces.items():
+        prefix = stimulus_id + "__"
+        arrays[prefix + "time_s"] = case_trace.time_s.astype(np.float64)
+        for signal_name in fixture.signals:
+            samples = case_trace.signals[signal_name]
+            arrays[prefix + signal_name + "_v"] = samples.astype(np.float64)
+            arrays[prefix + signal_name + "_ac_v"] = _remove_dc(samples).astype(np.float64)
+    np.savez(dataset_path, **arrays)
+
+    write_klon_centaur_dataset_report(report_path, fixture, cases, metrics)
+    manifest = klon_centaur_dataset_manifest(
+        fixture=fixture,
+        repo_root=repo_root,
+        cases=cases,
+        raw_paths=raw_paths,
+        netlist_paths=netlist_paths,
+        dataset_path=dataset_path,
+        report_path=report_path,
+        metrics=metrics,
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return dataset_path, manifest_path
+
+
+def klon_centaur_dataset_cases() -> list[KlonCentaurDatasetCase]:
+    return [
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_40mv_gain55_treble60",
+            kind="sine_level_sweep",
+            expression="0.040*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.040},
+            split="train",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_120mv_gain55_treble60",
+            kind="sine_level_sweep",
+            expression="0.120*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.120},
+            split="train",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_240mv_gain55_treble60",
+            kind="sine_level_sweep",
+            expression="0.240*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.240},
+            split="train",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_120mv_gain25_treble60",
+            kind="gain_control_sweep",
+            expression="0.120*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.120},
+            split="train",
+            gain=0.25,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_120mv_gain80_treble60",
+            kind="gain_control_sweep",
+            expression="0.120*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.120},
+            split="validation",
+            gain=0.80,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_120mv_gain55_treble30",
+            kind="treble_control_sweep",
+            expression="0.120*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.120},
+            split="train",
+            gain=0.55,
+            treble=0.30,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_1khz_120mv_gain55_treble85",
+            kind="treble_control_sweep",
+            expression="0.120*sin(2*pi*1000*time)",
+            parameters={"frequency_hz": 1000.0, "amplitude_v": 0.120},
+            split="validation",
+            gain=0.55,
+            treble=0.85,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_250hz_120mv_gain55_treble60",
+            kind="frequency_sweep",
+            expression="0.120*sin(2*pi*250*time)",
+            parameters={"frequency_hz": 250.0, "amplitude_v": 0.120},
+            split="train",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="sine_4khz_120mv_gain55_treble60",
+            kind="frequency_sweep",
+            expression="0.120*sin(2*pi*4000*time)",
+            parameters={"frequency_hz": 4000.0, "amplitude_v": 0.120},
+            split="test",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="two_tone_997_1499_120mv_gain55_treble60",
+            kind="two_tone_imd",
+            expression="0.060*sin(2*pi*997*time)+0.060*sin(2*pi*1499*time)",
+            parameters={"first_hz": 997.0, "second_hz": 1499.0, "combined_peak_v": 0.120},
+            split="test",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="burst_1khz_180mv_gain55_treble60",
+            kind="dynamic_burst",
+            expression=(
+                "0.180*sin(2*pi*1000*time)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+                "*(0.5-0.5*tanh((time-0.072)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 1000.0,
+                "amplitude_v": 0.180,
+                "event_start_s": 0.032,
+                "event_stop_s": 0.072,
+                "edge_time_s": 0.0003,
+            },
+            split="validation",
+            gain=0.55,
+            treble=0.60,
+        ),
+        KlonCentaurDatasetCase(
+            stimulus_id="pluck_750hz_160mv_gain55_treble60",
+            kind="dynamic_decay",
+            expression=(
+                "0.160*sin(2*pi*750*time)"
+                "*exp(-(time-0.032)/0.028)"
+                "*(0.5+0.5*tanh((time-0.032)/0.0003))"
+            ),
+            parameters={
+                "frequency_hz": 750.0,
+                "amplitude_v": 0.160,
+                "event_start_s": 0.032,
+                "decay_time_s": 0.028,
+                "edge_time_s": 0.0003,
+            },
+            split="test",
+            gain=0.55,
+            treble=0.60,
+        ),
+    ]
+
+
+def klon_centaur_generated_netlist(source_netlist: str, case: KlonCentaurDatasetCase, raw_path: Path) -> str:
+    replacements = {
+        ".param GAIN=0.55": f".param GAIN={case.gain:g}",
+        ".param TREBLE=0.60": f".param TREBLE={case.treble:g}",
+        ".param LEVEL=0.70": f".param LEVEL={case.level:g}",
+        "VIN guitar 0 SIN(0 120m 1k)": f"BVIN guitar 0 V={{ {case.expression} }}",
+        "tran 1u 120m 0 1u": f"tran {case.transient_step_s:g} {case.transient_stop_s:g} 0 {case.transient_step_s:g}",
+        "wrdata /tmp/greybound_klon_centaur.dat v(j2_tip) v(u2a_out) v(clean_feed) v(u2b_out) v(clip) v(mix_out) v(treble_wiper) v(vout)": (
+            f"wrdata {raw_path.resolve()} v(j2_tip) v(u2a_out) v(clean_feed) "
+            "v(u2b_out) v(clip) v(mix_out) v(treble_wiper) v(vout)"
+        ),
+    }
+    generated = source_netlist
+    for old, new in replacements.items():
+        if old not in generated:
+            raise ValueError(f"cannot generate Klon dataset netlist; missing line: {old}")
+        generated = generated.replace(old, new, 1)
+    generated = generated.replace(".param V9=9", ".param pi=3.141592653589793\n.param V9=9", 1)
+    return f"* Generated Greybound Klon dataset case: {case.stimulus_id}\n" + generated
 
 
 def common_cathode_dataset_cases() -> list[CommonCathodeDatasetCase]:
@@ -621,6 +852,106 @@ def common_cathode_sweep_dataset_manifest(
     }
 
 
+def klon_centaur_dataset_manifest(
+    *,
+    fixture: SpiceFixture,
+    repo_root: Path,
+    cases: list[KlonCentaurDatasetCase],
+    raw_paths: dict[str, Path],
+    netlist_paths: dict[str, Path],
+    dataset_path: Path,
+    report_path: Path,
+    metrics: KlonCentaurSpiceMetrics,
+) -> dict:
+    train = [case.stimulus_id for case in cases if case.split == "train"]
+    validation = [case.stimulus_id for case in cases if case.split == "validation"]
+    test = [case.stimulus_id for case in cases if case.split == "test"]
+    artifacts = [
+        {"path": relative_or_absolute(dataset_path, repo_root), "kind": "output", "sha256": sha256_file(dataset_path)},
+        {"path": relative_or_absolute(report_path, repo_root), "kind": "report", "sha256": sha256_file(report_path)},
+    ]
+    for case in cases:
+        artifacts.append(
+            {
+                "path": relative_or_absolute(netlist_paths[case.stimulus_id], repo_root),
+                "kind": "netlist",
+                "sha256": sha256_file(netlist_paths[case.stimulus_id]),
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "dataset_id": fixture.name + "-drive-clip-tone-v1",
+        "fixture_id": fixture.name,
+        "cell_kind": "klon_drive_clip_tone",
+        "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generator": {
+            "name": "greybound-lab spice-dataset",
+            "version": "0.1.0",
+            "git_revision": git_revision(repo_root),
+        },
+        "spice": {
+            "engine": "ngspice",
+            "version": _ngspice_version(repo_root),
+            "options": {
+                "filetype": "ascii",
+                "transient_step_s": 2.0e-6,
+                "transient_stop_s": 0.120,
+            },
+        },
+        "sample_rate_hz": _sample_rate_from_trace(raw_paths[cases[0].stimulus_id], fixture.signals),
+        "signals": {
+            "inputs": ["input_v", "buffer_v"],
+            "controls": ["gain", "treble", "level"],
+            "targets": ["drive_ac_v", "clip_ac_v", "mix_ac_v", "tone_ac_v"],
+            "context": ["clean_ac_v", "output_ac_v"],
+        },
+        "reference_metrics": asdict(metrics),
+        "stimuli": [
+            {
+                "id": case.stimulus_id,
+                "kind": case.kind,
+                "path": relative_or_absolute(raw_paths[case.stimulus_id], repo_root),
+                "sha256": sha256_file(raw_paths[case.stimulus_id]),
+                "parameters": {
+                    **case.parameters,
+                    "gain": case.gain,
+                    "treble": case.treble,
+                    "level": case.level,
+                    "transient_stop_s": case.transient_stop_s,
+                },
+                "split": case.split,
+            }
+            for case in cases
+        ],
+        "targets": [
+            {"node": "j2_tip", "unit": "V", "role": "input"},
+            {"node": "u2a_out", "unit": "V", "role": "buffer"},
+            {"node": "clean_feed", "unit": "V", "role": "analytic_context"},
+            {"node": "u2b_out", "unit": "V", "role": "drive"},
+            {"node": "clip", "unit": "V", "role": "clip_target"},
+            {"node": "mix_out", "unit": "V", "role": "mix_target"},
+            {"node": "treble_wiper", "unit": "V", "role": "tone_target"},
+            {"node": "vout", "unit": "V", "role": "output_guardrail"},
+        ],
+        "splits": {
+            "train": train,
+            "validation": validation,
+            "test": test,
+            "policy": (
+                "Train covers nominal level, low/hot amplitude, gain, treble, and low-frequency cases. "
+                "Validation holds out high gain, bright treble, and burst dynamics. "
+                "Test holds out high-frequency, IMD, and decay probes."
+            ),
+        },
+        "artifacts": artifacts,
+        "notes": (
+            "Synthetic SPICE corpus for a targeted Klon drive/clip/tone neural cell. "
+            "It is intentionally not a full-pedal black-box dataset."
+        ),
+    }
+
+
 def common_cathode_metrics(trace: SpiceTrace, settle_time_s: float = 0.050) -> CommonCathodeSpiceMetrics:
     mask = trace.time_s >= settle_time_s
     if not np.any(mask):
@@ -865,6 +1196,71 @@ Computed from the held nominal `sine_1khz_20mv` case after settling.
 
 Use this dataset to prove the training/export/runtime loop before drawing
 conclusions about final model quality.
+""",
+        encoding="utf-8",
+    )
+
+
+def write_klon_centaur_dataset_report(
+    path: Path,
+    fixture: SpiceFixture,
+    cases: list[KlonCentaurDatasetCase],
+    metrics: KlonCentaurSpiceMetrics,
+) -> None:
+    rows = "\n".join(
+        f"| `{case.stimulus_id}` | `{case.kind}` | `{case.split}` | {case.gain:.2f} | {case.treble:.2f} | `{case.expression}` |"
+        for case in cases
+    )
+    path.write_text(
+        f"""# SPICE Dataset Report: {fixture.name}
+
+## Purpose
+
+This dataset is the first Klon/Minotaur corpus for Greybound's targeted neural
+work. It is designed for a small causal drive/clip/tone cell, not for a
+full-pedal black-box replacement.
+
+## Fixture
+
+- Cell target: Klon drive stage, germanium clip node, summing/mix, and treble output
+- Preserved analytic context: input buffer, clean feed-forward path, level/output recovery
+- Op-amp model: local TI TL072 ngspice copy with the documented supply-current correction
+- Rails: idealized nominal Klon rails
+
+## Reference Case
+
+Computed from `sine_1khz_120mv_gain55_treble60` after the first 50 ms.
+
+| Metric | Value |
+| --- | ---: |
+| Input RMS | {metrics.input_rms_v * 1000.0:.3f} mV |
+| Drive stage RMS | {metrics.drive_rms_v * 1000.0:.3f} mV |
+| Clip node RMS | {metrics.clip_rms_v * 1000.0:.3f} mV |
+| Mix node RMS | {metrics.mix_rms_v * 1000.0:.3f} mV |
+| Tone node RMS | {metrics.tone_rms_v * 1000.0:.3f} mV |
+| Output RMS | {metrics.output_rms_v * 1000.0:.3f} mV |
+| Output gain | {metrics.output_gain_db:.2f} dB |
+| Clip peak | {metrics.clip_peak_v * 1000.0:.3f} mV |
+| Clip asymmetry | {metrics.clip_asymmetry_v * 1000.0:.3f} mV |
+
+## Stimuli
+
+| Stimulus | Kind | Split | Gain | Treble | Expression |
+| --- | --- | --- | ---: | ---: | --- |
+{rows}
+
+## Training Scope
+
+Use `buffer_v` plus normalized `gain`, `treble`, and short causal history as the
+primary input. The initial targets should be `clip_ac_v`, `mix_ac_v`, and
+`tone_ac_v`; keep the clean path and output level as analytic guardrails.
+
+## Limitations
+
+- Component tolerances and diode part variation are not swept yet.
+- The charge-pump switching network remains out of scope.
+- The dataset is synthetic SPICE only; NAM comparison remains the audio-level acceptance target.
+- There is no real DI phrase in this SPICE corpus yet.
 """,
         encoding="utf-8",
     )

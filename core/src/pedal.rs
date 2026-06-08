@@ -1,5 +1,34 @@
+use crate::amp::NeuralCellMode;
+use crate::neural_cell::{ExperimentalNeuralCell, NeuralCellRuntime};
+use std::env;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
 pub const GUITAR_SOURCE_IMPEDANCE_OHMS: f32 = 10_000.0;
 pub const AMP_INPUT_IMPEDANCE_OHMS: f32 = 1_000_000.0;
+
+#[derive(Clone)]
+struct MinotaurClipNeuralConfig {
+    descriptor_path: PathBuf,
+    mode: NeuralCellMode,
+}
+
+#[derive(Clone)]
+enum MinotaurClipNeuralSelection {
+    Default,
+    Disabled,
+    Configured(MinotaurClipNeuralConfig),
+}
+
+struct MinotaurClipNeural {
+    runtime: NeuralCellRuntime,
+    mode: NeuralCellMode,
+    buffer_history: [f32; 4],
+    last_clip_ac_v: f32,
+}
+
+static MINOTAUR_CLIP_NEURAL_CONFIG: OnceLock<Mutex<MinotaurClipNeuralSelection>> =
+    OnceLock::new();
 
 #[derive(Clone, Copy, Debug)]
 pub struct ElectricalSignal {
@@ -132,6 +161,7 @@ pub struct Minotaur {
     treble_highpass: OnePoleHighpass,
     level_highpass: OnePoleHighpass,
     output_lowpass: OnePoleLowpass,
+    clip_neural: Option<MinotaurClipNeural>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -547,6 +577,7 @@ impl Minotaur {
             treble_highpass: OnePoleHighpass::new(sample_rate, 1_650.0),
             level_highpass: OnePoleHighpass::new(sample_rate, 0.34),
             output_lowpass: OnePoleLowpass::new(sample_rate, 18_000.0),
+            clip_neural: minotaur_clip_neural(),
         }
     }
 
@@ -562,6 +593,9 @@ impl Minotaur {
         self.treble_highpass.reset();
         self.level_highpass.reset();
         self.output_lowpass.reset();
+        if let Some(neural) = &mut self.clip_neural {
+            neural.reset();
+        }
     }
 
     pub fn process(
@@ -595,7 +629,12 @@ impl Minotaur {
             .drive_feedback_lowpass
             .process(drive_input * feedback_gain);
         let clip_input = self.clip_coupling_highpass.process(drive_stage);
-        let clipped = diode_pair_clip(clip_input, 0.42);
+        let analytic_clipped = diode_pair_clip(clip_input, 0.42);
+        let clipped = if let Some(neural) = &mut self.clip_neural {
+            neural.process(buffered, gain, treble, output, analytic_clipped)
+        } else {
+            analytic_clipped
+        };
 
         let clean_feed =
             self.clean_feed_highpass.process(buffered) * (0.13 - gain * 0.06).max(0.035);
@@ -615,6 +654,101 @@ impl Minotaur {
             .clamp(-4.5, 4.5);
 
         ElectricalSignal::new(final_output, Self::OUTPUT_IMPEDANCE_OHMS)
+    }
+}
+
+pub fn configure_minotaur_clip_neural(descriptor_path: Option<PathBuf>, mode: NeuralCellMode) {
+    let slot = MINOTAUR_CLIP_NEURAL_CONFIG
+        .get_or_init(|| Mutex::new(MinotaurClipNeuralSelection::Default));
+    *slot.lock().expect("minotaur neural config mutex poisoned") =
+        if let Some(descriptor_path) = descriptor_path {
+            MinotaurClipNeuralSelection::Configured(MinotaurClipNeuralConfig {
+                descriptor_path,
+                mode,
+            })
+        } else {
+            MinotaurClipNeuralSelection::Disabled
+        };
+}
+
+fn minotaur_clip_neural() -> Option<MinotaurClipNeural> {
+    let config = match minotaur_clip_neural_selection() {
+        MinotaurClipNeuralSelection::Disabled => None,
+        MinotaurClipNeuralSelection::Configured(config) => Some(config),
+        MinotaurClipNeuralSelection::Default => env_minotaur_clip_neural(
+            "GREYBOUND_MINOTAUR_CLIP_REPLACE_DESCRIPTOR",
+            NeuralCellMode::Replace,
+        )
+        .or_else(|| {
+            env_minotaur_clip_neural(
+                "GREYBOUND_MINOTAUR_CLIP_SHADOW_DESCRIPTOR",
+                NeuralCellMode::Shadow,
+            )
+        }),
+    }?;
+    let cell = ExperimentalNeuralCell::from_descriptor_path(&config.descriptor_path).ok()?;
+    Some(MinotaurClipNeural {
+        runtime: cell.into_runtime(),
+        mode: config.mode,
+        buffer_history: [0.0; 4],
+        last_clip_ac_v: 0.0,
+    })
+}
+
+fn minotaur_clip_neural_selection() -> MinotaurClipNeuralSelection {
+    MINOTAUR_CLIP_NEURAL_CONFIG
+        .get_or_init(|| Mutex::new(MinotaurClipNeuralSelection::Default))
+        .lock()
+        .expect("minotaur neural config mutex poisoned")
+        .clone()
+}
+
+fn env_minotaur_clip_neural(name: &str, mode: NeuralCellMode) -> Option<MinotaurClipNeuralConfig> {
+    env::var_os(name).map(|descriptor_path| MinotaurClipNeuralConfig {
+        descriptor_path: PathBuf::from(descriptor_path),
+        mode,
+    })
+}
+
+impl MinotaurClipNeural {
+    fn reset(&mut self) {
+        self.buffer_history = [0.0; 4];
+        self.last_clip_ac_v = 0.0;
+    }
+
+    fn process(
+        &mut self,
+        buffered: f32,
+        gain: f32,
+        treble: f32,
+        _output: f32,
+        analytic_clipped: f32,
+    ) -> f32 {
+        self.buffer_history.copy_within(0..3, 1);
+        self.buffer_history[0] = buffered;
+        let mut features = vec![0.0; self.runtime.input_features()];
+        let history_len = features.len().min(4);
+        features[..history_len].copy_from_slice(&self.buffer_history[..history_len]);
+        if features.len() > 4 {
+            features[4] = gain;
+        }
+        if features.len() > 5 {
+            features[5] = treble;
+        }
+        if features.len() > 6 {
+            features[6] = 0.70;
+        }
+        let neural = self
+            .runtime
+            .process_features(&features)
+            .unwrap_or(analytic_clipped)
+            .clamp(-1.5, 1.5);
+        self.last_clip_ac_v = neural;
+        if self.mode == NeuralCellMode::Replace {
+            neural
+        } else {
+            analytic_clipped
+        }
     }
 }
 

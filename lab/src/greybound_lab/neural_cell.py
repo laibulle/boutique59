@@ -37,6 +37,24 @@ class PreparedDataset:
 
 
 @dataclass(frozen=True)
+class PreparedVectorDataset:
+    train: PreparedSplit
+    validation: PreparedSplit
+    test: PreparedSplit
+    input_mean: np.ndarray
+    input_std: np.ndarray
+    output_mean: float
+    output_std: float
+    sample_rate_hz: int
+    history_samples: int
+    input_ids: list[str]
+    output_id: str
+    train_ids: list[str]
+    validation_ids: list[str]
+    test_ids: list[str]
+
+
+@dataclass(frozen=True)
 class NeuralCellEvaluationRow:
     stimulus_id: str
     split: str
@@ -165,6 +183,112 @@ def train_common_cathode_mlp(
     return descriptor_path, weights_path, report_path
 
 
+def train_klon_drive_clip_tone_mlp(
+    *,
+    manifest_path: Path,
+    output_dir: Path,
+    repo_root: Path,
+    target: str = "tone_ac_v",
+    epochs: int = 300,
+    hidden_size: int = 32,
+    learning_rate: float = 1.0e-3,
+    stride: int = 16,
+    history_samples: int = 4,
+    seed: int = 59,
+) -> tuple[Path, Path, Path]:
+    if target not in {"clip_ac_v", "mix_ac_v", "tone_ac_v"}:
+        raise ValueError("--target must be one of clip_ac_v, mix_ac_v, tone_ac_v")
+    torch = _import_torch()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    descriptor_path = output_dir / "model.greybound.json"
+    weights_path = output_dir / "weights.greybound.bin"
+    report_path = output_dir / "training-report.md"
+
+    manifest = _read_json(manifest_path)
+    prepared = prepare_klon_drive_clip_tone_dataset(
+        manifest_path,
+        target=target,
+        stride=stride,
+        history_samples=history_samples,
+    )
+    torch.manual_seed(seed)
+    input_features = int(prepared.train.x.shape[1])
+    model = torch.nn.Sequential(
+        torch.nn.Linear(input_features, hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(hidden_size, hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(hidden_size, 1),
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    loss_fn = torch.nn.MSELoss()
+
+    x_train = torch.from_numpy(prepared.train.x.astype(np.float32))
+    y_train = torch.from_numpy(prepared.train.y.astype(np.float32))
+    x_val = torch.from_numpy(prepared.validation.x.astype(np.float32))
+    y_val = torch.from_numpy(prepared.validation.y.astype(np.float32))
+    x_test = torch.from_numpy(prepared.test.x.astype(np.float32))
+    y_test = torch.from_numpy(prepared.test.y.astype(np.float32))
+
+    best_state = None
+    best_val = math.inf
+    for _ in range(epochs):
+        model.train()
+        optimizer.zero_grad()
+        loss = loss_fn(model(x_train), y_train)
+        loss.backward()
+        optimizer.step()
+        model.eval()
+        with torch.no_grad():
+            val_loss = float(loss_fn(model(x_val), y_val).item()) if x_val.numel() else float(loss.item())
+        if val_loss < best_val:
+            best_val = val_loss
+            best_state = {key: value.detach().clone() for key, value in model.state_dict().items()}
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+
+    model.eval()
+    with torch.no_grad():
+        train_pred = model(x_train).detach().cpu().numpy()
+        val_pred = model(x_val).detach().cpu().numpy()
+        test_pred = model(x_test).detach().cpu().numpy()
+
+    layers = _extract_mlp_layers(model)
+    write_mlp_weights(weights_path, layers)
+    numpy_test_pred = infer_mlp_numpy(prepared.test.x, layers)
+    export_max_abs_error = float(np.max(np.abs(numpy_test_pred - test_pred))) if test_pred.size else 0.0
+    metrics = {
+        "train_mse_normalized": _mse(train_pred, prepared.train.y),
+        "validation_mse_normalized": _mse(val_pred, prepared.validation.y),
+        "test_mse_normalized": _mse(test_pred, prepared.test.y),
+        "test_baseline_mse_normalized": _mse(np.zeros_like(prepared.test.y), prepared.test.y),
+        "export_max_abs_error_normalized": export_max_abs_error,
+        "epochs": epochs,
+        "hidden_size": hidden_size,
+        "learning_rate": learning_rate,
+        "stride": stride,
+        "history_samples": prepared.history_samples,
+        "train_samples": int(prepared.train.x.shape[0]),
+        "validation_samples": int(prepared.validation.x.shape[0]),
+        "test_samples": int(prepared.test.x.shape[0]),
+        "input_features": input_features,
+    }
+    descriptor = build_klon_mlp_descriptor(
+        manifest=manifest,
+        manifest_path=manifest_path,
+        output_dir=output_dir,
+        repo_root=repo_root,
+        weights_path=weights_path,
+        hidden_size=hidden_size,
+        prepared=prepared,
+        metrics=metrics,
+    )
+    descriptor_path.write_text(json.dumps(descriptor, indent=2) + "\n", encoding="utf-8")
+    write_klon_training_report(report_path, descriptor, metrics, prepared)
+    return descriptor_path, weights_path, report_path
+
+
 def prepare_common_cathode_dataset(
     manifest_path: Path,
     *,
@@ -200,6 +324,62 @@ def prepare_common_cathode_dataset(
         output_std=output_std,
         sample_rate_hz=int(manifest["sample_rate_hz"]),
         history_samples=history_samples,
+        train_ids=train_ids,
+        validation_ids=validation_ids,
+        test_ids=test_ids,
+    )
+
+
+def prepare_klon_drive_clip_tone_dataset(
+    manifest_path: Path,
+    *,
+    target: str = "tone_ac_v",
+    stride: int = 16,
+    history_samples: int = 4,
+) -> PreparedVectorDataset:
+    if history_samples < 1:
+        raise ValueError("history_samples must be at least 1")
+    manifest = _read_json(manifest_path)
+    dataset_path = _resolve_manifest_path(manifest_path, _artifact_path(manifest, "output"))
+    npz = np.load(dataset_path)
+    controls_by_id = {
+        str(stimulus["id"]): stimulus.get("parameters", {})
+        for stimulus in manifest.get("stimuli", [])
+    }
+    train_ids = list(manifest["splits"]["train"])
+    validation_ids = list(manifest["splits"]["validation"])
+    test_ids = list(manifest["splits"]["test"])
+    input_ids = klon_input_ids_for_target(target, history_samples)
+    train_raw = _collect_klon_split(npz, controls_by_id, train_ids, target, stride, history_samples, input_ids)
+    validation_raw = _collect_klon_split(
+        npz,
+        controls_by_id,
+        validation_ids,
+        target,
+        stride,
+        history_samples,
+        input_ids,
+    )
+    test_raw = _collect_klon_split(npz, controls_by_id, test_ids, target, stride, history_samples, input_ids)
+
+    input_mean = np.mean(train_raw.x, axis=0).astype(np.float32)
+    input_std = np.std(train_raw.x, axis=0).astype(np.float32)
+    input_std = np.where(input_std > 1.0e-12, input_std, 1.0).astype(np.float32)
+    output_mean = float(np.mean(train_raw.y))
+    output_std = float(np.std(train_raw.y))
+    output_std = output_std if output_std > 1.0e-12 else 1.0
+    return PreparedVectorDataset(
+        train=_normalize_vector_split(train_raw, input_mean, input_std, output_mean, output_std),
+        validation=_normalize_vector_split(validation_raw, input_mean, input_std, output_mean, output_std),
+        test=_normalize_vector_split(test_raw, input_mean, input_std, output_mean, output_std),
+        input_mean=input_mean,
+        input_std=input_std,
+        output_mean=output_mean,
+        output_std=output_std,
+        sample_rate_hz=int(manifest["sample_rate_hz"]),
+        history_samples=history_samples,
+        input_ids=input_ids,
+        output_id=target,
         train_ids=train_ids,
         validation_ids=validation_ids,
         test_ids=test_ids,
@@ -435,6 +615,98 @@ def build_mlp_descriptor(
     }
 
 
+def build_klon_mlp_descriptor(
+    *,
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    output_dir: Path,
+    repo_root: Path,
+    weights_path: Path,
+    hidden_size: int,
+    prepared: PreparedVectorDataset,
+    metrics: dict[str, float | int],
+) -> dict[str, Any]:
+    input_features = len(prepared.input_ids)
+    return {
+        "schema_version": 1,
+        "artifact_id": output_dir.name,
+        "cell_kind": "klon_drive_clip_tone",
+        "architecture": {
+            "family": "mlp",
+            "activation": "tanh",
+            "receptive_field_samples": prepared.history_samples - 1,
+            "layers": [
+                {"type": "dense", "in_features": input_features, "out_features": hidden_size},
+                {"type": "dense", "in_features": hidden_size, "out_features": hidden_size},
+                {"type": "dense", "in_features": hidden_size, "out_features": 1},
+            ],
+        },
+        "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "sample_rate_policy": {
+            "mode": "fixed",
+            "sample_rate_hz": prepared.sample_rate_hz,
+        },
+        "io": {
+            "inputs": [{"id": item, "unit": "V" if item.startswith("buffer") else "normalized"} for item in prepared.input_ids],
+            "outputs": [{"id": prepared.output_id, "unit": "V"}],
+            "normalization": {
+                "input_mean": prepared.input_mean.astype(float).tolist(),
+                "input_std": prepared.input_std.astype(float).tolist(),
+                "output_mean": prepared.output_mean,
+                "output_std": prepared.output_std,
+            },
+        },
+        "controls": [
+            {"id": "gain", "range": [0.0, 1.0]},
+            {"id": "treble", "range": [0.0, 1.0]},
+            {"id": "level", "range": [0.0, 1.0]},
+        ],
+        "state": {
+            "samples": 0,
+            "floats": prepared.history_samples - 1,
+            "description": "Causal MLP over buffer-voltage history plus static pedal controls.",
+        },
+        "weights": {
+            "format": "greybound-bin-v1",
+            "path": weights_path.name,
+            "sha256": sha256_file(weights_path),
+            "dtype": "f32",
+            "endianness": "little",
+            "layout": [
+                {"name": "dense0", "in_features": input_features, "out_features": hidden_size},
+                {"name": "dense1", "in_features": hidden_size, "out_features": hidden_size},
+                {"name": "dense2", "in_features": hidden_size, "out_features": 1},
+            ],
+        },
+        "training": {
+            "framework": "PyTorch",
+            "framework_version": _torch_version_or_unknown(),
+            "code_revision": git_revision(repo_root),
+            "dataset_manifest": relative_or_absolute(manifest_path, repo_root),
+            "dataset_sha256": sha256_file(manifest_path),
+            "source_dataset_id": manifest.get("dataset_id", "unknown"),
+        },
+        "validation": {
+            "status": "experimental_lab_only",
+            "metrics": metrics,
+            "report": relative_or_absolute(output_dir / "training-report.md", repo_root),
+            "limitations": [
+                "Synthetic SPICE only; NAM remains the audio acceptance reference.",
+                "Single-target model. Train clip_ac_v, mix_ac_v, and tone_ac_v separately before choosing an integrated runtime strategy.",
+                "The clip_ac_v model is useful as a shadow diagnostic; current audio-level blend tests do not justify replacing the analytic Minotaur clip path.",
+            ],
+        },
+        "runtime": {
+            "latency_samples": 0,
+            "max_block_size": 1,
+            "allocates_on_audio_thread": False,
+            "denormal_safe": False,
+            "cpu_notes": "Lab artifact for Minotaur drive/clip/tone research. Rust runtime vector-input adapter is still required.",
+        },
+        "notes": "First Greybound Klon/Minotaur neural candidate trained from the generated SPICE drive/clip/tone corpus.",
+    }
+
+
 def write_training_report(
     path: Path,
     descriptor: dict[str, Any],
@@ -485,6 +757,59 @@ training/export/equivalence path.
 - Trained on decimated samples.
 - The dataset is still a small SPICE corpus.
 - Rust inference and experimental Nox30 integration exist; not approved for default live use.
+""",
+        encoding="utf-8",
+    )
+
+
+def write_klon_training_report(
+    path: Path,
+    descriptor: dict[str, Any],
+    metrics: dict[str, float | int],
+    prepared: PreparedVectorDataset,
+) -> None:
+    path.write_text(
+        f"""# Minotaur Neural Cell Training Report: {descriptor['artifact_id']}
+
+## Purpose
+
+Train a small causal MLP against the Klon/Minotaur SPICE corpus. This is a
+targeted drive/clip/tone experiment, not a full-pedal replacement.
+
+## Dataset
+
+- Target: `{prepared.output_id}`
+- Inputs: {', '.join(f'`{item}`' for item in prepared.input_ids)}
+- Train stimuli: {', '.join(f'`{item}`' for item in prepared.train_ids)}
+- Validation stimuli: {', '.join(f'`{item}`' for item in prepared.validation_ids)}
+- Test stimuli: {', '.join(f'`{item}`' for item in prepared.test_ids)}
+- Train samples after stride: `{metrics['train_samples']}`
+- Validation samples after stride: `{metrics['validation_samples']}`
+- Test samples after stride: `{metrics['test_samples']}`
+- Causal buffer history samples: `{metrics['history_samples']}`
+
+## Metrics
+
+| Metric | Value |
+| --- | ---: |
+| Train MSE normalized | {float(metrics['train_mse_normalized']):.8g} |
+| Validation MSE normalized | {float(metrics['validation_mse_normalized']):.8g} |
+| Test MSE normalized | {float(metrics['test_mse_normalized']):.8g} |
+| Test baseline MSE normalized | {float(metrics['test_baseline_mse_normalized']):.8g} |
+| Export max abs error normalized | {float(metrics['export_max_abs_error_normalized']):.8g} |
+
+## Export
+
+- Descriptor: `model.greybound.json`
+- Weights: `weights.greybound.bin`
+- Weight format: `greybound-bin-v1`
+- Runtime status: experimental lab artifact
+
+## Integration Notes
+
+The model uses vector input normalization. The Rust neural-cell runtime can load
+the descriptor, but this artifact should be treated as a shadow diagnostic until
+audio-level NAM comparison improves over the analytic Minotaur path.
 """,
         encoding="utf-8",
     )
@@ -748,6 +1073,69 @@ def _normalize_split(
     return PreparedSplit(
         x=((split.x - input_mean) / input_std).astype(np.float32),
         y=((split.y - output_mean) / output_std).astype(np.float32),
+    )
+
+
+def _normalize_vector_split(
+    split: PreparedSplit,
+    input_mean: np.ndarray,
+    input_std: np.ndarray,
+    output_mean: float,
+    output_std: float,
+) -> PreparedSplit:
+    return PreparedSplit(
+        x=((split.x - input_mean.reshape((1, -1))) / input_std.reshape((1, -1))).astype(np.float32),
+        y=((split.y - output_mean) / output_std).astype(np.float32),
+    )
+
+
+def klon_input_ids_for_target(target: str, history_samples: int) -> list[str]:
+    input_ids = [f"buffer_ac_v_t-{offset}" if offset else "buffer_ac_v" for offset in range(history_samples)]
+    if target == "clip_ac_v":
+        return input_ids + ["gain"]
+    if target == "mix_ac_v":
+        return input_ids + ["gain"]
+    if target == "tone_ac_v":
+        return input_ids + ["gain", "treble"]
+    return input_ids + ["gain", "treble"]
+
+
+def _collect_klon_split(
+    npz: Any,
+    controls_by_id: dict[str, dict[str, Any]],
+    stimulus_ids: list[str],
+    target: str,
+    stride: int,
+    history_samples: int,
+    input_ids: list[str],
+) -> PreparedSplit:
+    features = []
+    targets = []
+    control_ids = [item for item in input_ids if not item.startswith("buffer_ac_v")]
+    for stimulus_id in stimulus_ids:
+        prefix = stimulus_id + "__"
+        buffer_key = prefix + "buffer_ac_v"
+        target_key = prefix + target
+        if buffer_key not in npz:
+            raise ValueError(f"dataset is missing {buffer_key}")
+        if target_key not in npz:
+            raise ValueError(f"dataset is missing {target_key}")
+        buffer_history = _causal_history_matrix(npz[buffer_key].astype(np.float32), history_samples)
+        control_values = controls_by_id.get(stimulus_id, {})
+        control_array = np.asarray(
+            [float(control_values.get(control_id, 0.5)) for control_id in control_ids],
+            dtype=np.float32,
+        ).reshape((1, len(control_ids)))
+        controls = np.tile(control_array, (buffer_history.shape[0], 1))
+        case_x = np.concatenate([buffer_history, controls], axis=1)[::stride]
+        case_y = npz[target_key].astype(np.float32).reshape((-1, 1))[::stride]
+        features.append(case_x)
+        targets.append(case_y)
+    if not features:
+        return PreparedSplit(x=np.zeros((0, len(input_ids)), dtype=np.float32), y=np.zeros((0, 1), dtype=np.float32))
+    return PreparedSplit(
+        x=np.concatenate(features, axis=0).astype(np.float32),
+        y=np.concatenate(targets, axis=0).astype(np.float32),
     )
 
 

@@ -67,10 +67,10 @@ struct DenseLayer {
     bias: Vec<f32>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Normalization {
-    input_mean: f32,
-    input_std: f32,
+    input_mean: Vec<f32>,
+    input_std: Vec<f32>,
     output_mean: f32,
     output_std: f32,
 }
@@ -95,10 +95,17 @@ struct IoDescriptor {
 
 #[derive(Debug, Deserialize)]
 struct NormalizationDescriptor {
-    input_mean: f32,
-    input_std: f32,
+    input_mean: ScalarOrVector,
+    input_std: ScalarOrVector,
     output_mean: f32,
     output_std: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ScalarOrVector {
+    Scalar(f32),
+    Vector(Vec<f32>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,7 +136,31 @@ impl ExperimentalNeuralCell {
 
     pub fn process_sample(&self, input_v: f32) -> f32 {
         let mut values = vec![0.0; self.input_features];
-        values[0] = (input_v - self.normalization.input_mean) / self.normalization.input_std;
+        values[0] = (input_v - self.normalization.input_mean[0]) / self.normalization.input_std[0];
+        for index in 1..self.input_features {
+            values[index] = (0.0 - self.normalization.input_mean[index])
+                / self.normalization.input_std[index];
+        }
+        self.process_normalized_features(values)
+    }
+
+    pub fn process_features(&self, features: &[f32]) -> Result<f32> {
+        if features.len() != self.input_features {
+            bail!(
+                "neural-cell feature length mismatch: {} != {}",
+                features.len(),
+                self.input_features
+            );
+        }
+        let mut values = vec![0.0; self.input_features];
+        for index in 0..self.input_features {
+            values[index] = (features[index] - self.normalization.input_mean[index])
+                / self.normalization.input_std[index];
+        }
+        Ok(self.process_normalized_features(values))
+    }
+
+    fn process_normalized_features(&self, mut values: Vec<f32>) -> f32 {
         for (index, layer) in self.layers.iter().enumerate() {
             let mut next = vec![0.0; layer.out_features];
             for out_index in 0..layer.out_features {
@@ -210,8 +241,19 @@ impl ExperimentalNeuralCell {
             bail!("only causal scalar-output neural cells are supported");
         }
         let normalization = Normalization {
-            input_mean: descriptor.io.normalization.input_mean,
-            input_std: nonzero_std(descriptor.io.normalization.input_std, "input_std")?,
+            input_mean: expand_normalization(
+                &descriptor.io.normalization.input_mean,
+                layers[0].in_features,
+                "input_mean",
+            )?,
+            input_std: expand_normalization(
+                &descriptor.io.normalization.input_std,
+                layers[0].in_features,
+                "input_std",
+            )?
+            .into_iter()
+            .map(|value| nonzero_std(value, "input_std"))
+            .collect::<Result<Vec<_>>>()?,
             output_mean: descriptor.io.normalization.output_mean,
             output_std: nonzero_std(descriptor.io.normalization.output_std, "output_std")?,
         };
@@ -240,6 +282,10 @@ impl NeuralCellRuntime {
         }
     }
 
+    pub fn input_features(&self) -> usize {
+        self.cell.input_features
+    }
+
     #[inline]
     pub fn process_sample(&mut self, input_v: f32) -> f32 {
         let input_features = self.cell.input_features;
@@ -249,8 +295,8 @@ impl NeuralCellRuntime {
         self.input_history[0] = input_v;
         for index in 0..input_features {
             self.scratch_a[index] = (self.input_history[index]
-                - self.cell.normalization.input_mean)
-                / self.cell.normalization.input_std;
+                - self.cell.normalization.input_mean[index])
+                / self.cell.normalization.input_std[index];
         }
         let mut input_len = input_features;
         for (index, layer) in self.cell.layers.iter().enumerate() {
@@ -272,6 +318,41 @@ impl NeuralCellRuntime {
             input_len = layer.out_features;
         }
         self.scratch_a[0] * self.cell.normalization.output_std + self.cell.normalization.output_mean
+    }
+
+    pub fn process_features(&mut self, features: &[f32]) -> Result<f32> {
+        if features.len() != self.cell.input_features {
+            bail!(
+                "neural-cell feature length mismatch: {} != {}",
+                features.len(),
+                self.cell.input_features
+            );
+        }
+        for (index, feature) in features.iter().enumerate() {
+            self.scratch_a[index] = (*feature - self.cell.normalization.input_mean[index])
+                / self.cell.normalization.input_std[index];
+        }
+        let mut input_len = self.cell.input_features;
+        for (index, layer) in self.cell.layers.iter().enumerate() {
+            debug_assert_eq!(input_len, layer.in_features);
+            for out_index in 0..layer.out_features {
+                let row = out_index * layer.in_features;
+                let mut sum = layer.bias[out_index];
+                for in_index in 0..layer.in_features {
+                    sum += layer.weight[row + in_index] * self.scratch_a[in_index];
+                }
+                self.scratch_b[out_index] = if index + 1 == self.cell.layers.len() {
+                    sum
+                } else {
+                    sum.tanh()
+                };
+            }
+            self.scratch_a[..layer.out_features]
+                .copy_from_slice(&self.scratch_b[..layer.out_features]);
+            input_len = layer.out_features;
+        }
+        Ok(self.scratch_a[0] * self.cell.normalization.output_std
+            + self.cell.normalization.output_mean)
     }
 
     pub fn process_block(&mut self, input_v: &[f32], output_v: &mut [f32]) -> Result<()> {
@@ -523,6 +604,27 @@ fn nonzero_std(value: f32, name: &str) -> Result<f32> {
     Ok(value)
 }
 
+fn expand_normalization(
+    value: &ScalarOrVector,
+    input_features: usize,
+    name: &str,
+) -> Result<Vec<f32>> {
+    match value {
+        ScalarOrVector::Scalar(item) => Ok(vec![*item; input_features]),
+        ScalarOrVector::Vector(items) => {
+            if items.len() != input_features {
+                bail!(
+                    "neural-cell normalization {} has {} values, expected {}",
+                    name,
+                    items.len(),
+                    input_features
+                );
+            }
+            Ok(items.clone())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -665,6 +767,47 @@ mod tests {
         let mut output = [0.0, 0.0];
         cell.process_block(&[0.5, 0.25], &mut output).unwrap();
         assert_eq!(output, [0.5, 1.25]);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn loads_vector_normalization_and_processes_features() {
+        let dir = test_dir("loads_vector_normalization_and_processes_features");
+        fs::create_dir_all(&dir).unwrap();
+        write_test_weights(
+            &dir.join("weights.greybound.bin"),
+            &[(&[1.0_f32, 2.0_f32][..], &[0.5_f32][..])],
+        );
+        fs::write(
+            dir.join("model.greybound.json"),
+            r#"{
+              architecture: { family: "mlp", activation: "tanh" },
+              io: {
+                normalization: {
+                  input_mean: [1.0, 10.0],
+                  input_std: [2.0, 5.0],
+                  output_mean: -1.0,
+                  output_std: 3.0,
+                },
+              },
+              weights: {
+                format: "greybound-bin-v1",
+                path: "weights.greybound.bin",
+                dtype: "f32",
+                endianness: "little",
+                layout: [{ in_features: 2, out_features: 1 }],
+              },
+            }"#,
+        )
+        .unwrap();
+
+        let cell =
+            ExperimentalNeuralCell::from_descriptor_path(dir.join("model.greybound.json")).unwrap();
+        let output = cell.process_features(&[3.0, 15.0]).unwrap();
+
+        assert_eq!(output, 9.5);
+        let mut runtime = cell.prepare_runtime();
+        assert_eq!(runtime.process_features(&[3.0, 15.0]).unwrap(), 9.5);
         let _ = fs::remove_dir_all(dir);
     }
 

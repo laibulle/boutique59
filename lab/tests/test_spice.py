@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from greybound_lab.spice import FIXTURES, common_cathode_dataset_cases, common_cathode_dataset_manifest
-from greybound_lab.spice import common_cathode_generated_netlist, common_cathode_metrics, klon_centaur_metrics, parse_wrdata
+from greybound_lab.spice import common_cathode_generated_netlist, common_cathode_metrics, klon_centaur_dataset_cases
+from greybound_lab.spice import klon_centaur_generated_netlist, klon_centaur_metrics, parse_wrdata
 from greybound_lab.spice import sha256_file
 
 
@@ -136,3 +137,24 @@ def test_common_cathode_dataset_cases_cover_splits(tmp_path: Path) -> None:
     assert "BVIN in 0" in netlist
     assert "tanh((time-0.032)" in netlist
     assert "12AX7_KOREN" in netlist
+
+
+def test_klon_centaur_dataset_cases_generate_parametric_netlists(tmp_path: Path) -> None:
+    cases = klon_centaur_dataset_cases()
+    splits = {case.split for case in cases}
+
+    assert splits == {"train", "validation", "test"}
+    assert any(case.kind == "gain_control_sweep" and case.gain > 0.75 for case in cases)
+    assert any(case.kind == "treble_control_sweep" and case.treble > 0.80 for case in cases)
+    assert any(case.kind == "two_tone_imd" for case in cases)
+    assert any(case.kind == "dynamic_decay" and case.split == "test" for case in cases)
+
+    source = Path("tests/fixtures/circuit/klon_centaur.cir").read_text(encoding="utf-8")
+    dynamic_case = next(case for case in cases if case.kind == "dynamic_burst")
+    netlist = klon_centaur_generated_netlist(source, dynamic_case, tmp_path / "case.dat")
+
+    assert ".param GAIN=0.55" in netlist
+    assert ".param TREBLE=0.6" in netlist
+    assert "BVIN guitar 0 V={" in netlist
+    assert "tanh((time-0.032)" in netlist
+    assert f"wrdata {(tmp_path / 'case.dat').resolve()}" in netlist

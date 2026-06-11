@@ -111,7 +111,7 @@ Use `render-rig` to call the release `greybound-cli`, write a WAV into
 
 ```sh
 uv --project lab run greybound-lab render-rig \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven.wav \
   --metadata lab/renders/nox30-driven.run.json \
@@ -145,7 +145,7 @@ NAM render, and do not pass `--ir` to Greybound during the sweep.
 
 ```sh
 uv --project lab run greybound-lab sweep-rig-vs-reference \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --sweep volume=0.64,0.76,0.88 \
   --sweep drive=0.68,0.80,0.92 \
   --sweep sag=0.55,0.70 \
@@ -309,7 +309,7 @@ Nox30 has an explicit first-stage neural path. The CLI form is:
 
 ```sh
 target/release/greybound-cli \
-  --rig rigs/nox30-nam-anchor.json5 \
+  --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-nox30-monitor.wav \
   --render-seconds 20 \
@@ -350,7 +350,7 @@ It renders three versions of the same offline rig:
 
 The command writes its report to
 `lab/reports/integrated-neural-first-stage-anchor-current.md`. It uses
-`rigs/nox30-nam-anchor.json5`, no IR, `lab/segments/guitar-chords.markers.json`,
+`rigs/grey-nox.json5`, no IR, `lab/segments/guitar-chords.markers.json`,
 and the NAM TopBoost-Gain5 render as external reference. This is the first
 full-chain gate for a neural component: shadow telemetry gives local component
 error in volts, replace-vs-analytic audio metrics show the complete

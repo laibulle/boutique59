@@ -65,7 +65,7 @@ Then run with a name from the list. Channel numbers are one-based:
 
 ```sh
 target/release/greybound-cli \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --device 'Scarlett 18i8 USB' \
   --input-channel 1 \
   --output-channels 1,2 \
@@ -76,7 +76,7 @@ target/release/greybound-cli \
 Run the release binary directly. Adjust the device name, sample rate, and period size for the interface:
 
 ```sh
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
+target/release/greybound-cli --rig rigs/grey-nox.json5 --device 'Scarlett 18i8 USB' \
   --input-channel 1 --output-channels 1,2 \
   --sample-rate 48000 --period-size 128
 ```
@@ -107,7 +107,7 @@ convolution is skipped and only the matching dry delay runs.
 Rig files define amp and pedal controls. The standalone CLI requires `--rig`:
 
 ```sh
-target/release/greybound-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/grey-nox.json5 \
   --device 'Scarlett 18i8 USB' --input-channel 1 --output-channels 1,2 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 ```
@@ -132,16 +132,16 @@ input device.
 Generic standalone runs:
 
 ```sh
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'Scarlett 18i8 USB' \
+target/release/greybound-cli --rig rigs/grey-nox.json5 --device 'Scarlett 18i8 USB' \
   --input-channel 1 --output-channels 1,2 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 
-target/release/greybound-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --device 'Scarlett 18i8 USB' --output-channels 1,2 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 
-target/release/greybound-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 \
   --sample-rate 48000 --period-size 16 --ir --monitor
@@ -150,22 +150,22 @@ target/release/greybound-cli --rig rigs/nox30-driven.json5 \
 File, null, and WAV monitor runs use the same binary:
 
 ```sh
-target/release/greybound-cli --rig rigs/nox30-driven.json5 \
+target/release/greybound-cli --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 \
+target/release/greybound-cli --rig rigs/all-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 
-target/release/greybound-cli --rig rigs/minotaur-nox30.json5 \
+target/release/greybound-cli --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-overdrive-monitor.wav --render-seconds 10 \
   --sample-rate 48000 --period-size 16 --ir --monitor
 
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 \
+target/release/greybound-cli --rig rigs/all-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --device 'Scarlett 18i8 USB' --output-channels 1,2 \
   --sample-rate 48000 --period-size 16 --ir --monitor

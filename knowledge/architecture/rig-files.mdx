@@ -8,13 +8,13 @@ Rig files describe the musical rig, not the runtime session. They should not con
 Runtime stays in CLI flags:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 For generated rigs, the CLI also accepts `--rig -` and reads the JSON5 rig from stdin:
 
 ```bash
-sed 's/bypassed: true/bypassed: false/' rigs/minotaur-nox30.json5 | target/release/greybound-cli --rig - --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/generated-rig.wav --render-seconds 10 --sample-rate 48000 --period-size 16
+sed 's/bypassed: true/bypassed: false/' rigs/grey-nox.json5 | target/release/greybound-cli --rig - --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/generated-rig.wav --render-seconds 10 --sample-rate 48000 --period-size 16
 ```
 
 ## Format
@@ -23,7 +23,7 @@ Rig files use JSON5 so they can keep JSON-like structure while supporting commen
 
 ```json5
 {
-  name: "muffin-nox30",
+  name: "grey-nox",
 
   chain: {
     cable_capacitance_pf: 470,
@@ -31,13 +31,13 @@ Rig files use JSON5 so they can keep JSON-like structure while supporting commen
 
   pre_amp: [
     {
-      id: "fuzz",
-      device: "muffin",
+      id: "klon-drive",
+      device: "minotaur",
       bypassed: false,
       controls: {
-        sustain: 0.7,
-        tone: 0.46,
-        level: 0.45,
+        gain: 0.42,
+        treble: 0.70,
+        output: 0.42,
       },
     },
   ],
@@ -93,22 +93,11 @@ Supported device ids:
 
 ## Included Rigs
 
-- `rigs/nox30-clean.json5`
-- `rigs/nox30-edge.json5`
-- `rigs/nox30-driven.json5`
-- `rigs/nox30-all-pedals-bypassed.json5`
-- `rigs/lumen-nox30.json5`
-- `rigs/muon-nox30.json5`
-- `rigs/muffin-nox30.json5`
-- `rigs/godess-one-nox30.json5`
-- `rigs/dartford-nox30.json5`
-- `rigs/springfield-nox30.json5`
-- `rigs/minotaur-nox30.json5`
-- `rigs/monarch-nox30.json5`
-- `rigs/tron-nox30.json5`
-- `rigs/jetstream-nox30.json5`
-- `rigs/celeste-nox30.json5`
-- `rigs/brigade-nox30.json5`
+- `rigs/all-nox.json5`: every current pedal slot on the Nox30 chain. This is a
+  broad integration board, not proof that every pedal is a finished grey-box
+  implementation.
+- `rigs/grey-nox.json5`: Klon/Minotaur into Nox30. This is the default focused
+  rig because those are the current real grey-box implementations.
 
 ## Boundaries
 

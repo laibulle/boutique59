@@ -56,7 +56,7 @@ function pedalControlState(pedals: Pedal[]) {
 }
 
 export function GreyboundConsole() {
-  const [rigId, setRigId] = useState("minotaur-nox30");
+  const [rigId, setRigId] = useState("grey-nox");
   const [runtime, setRuntime] = useState<RuntimeConfig>({
     ...defaultRuntimeConfig,
     inputSourceUrl: defaultTone3000Input.url,

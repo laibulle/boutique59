@@ -39,11 +39,11 @@ KLON_INPUT_DB ?= -36
 KLON_OUTPUT_DB ?= -12
 KLON_OUTPUT_WAV ?= lab/reports/klon-minotaur/klon-gain5.wav
 KLON_METADATA ?= lab/reports/klon-minotaur/klon-gain5.run.json
-MINOTAUR_PEDAL_RIG ?= rigs/minotaur-pedal-only.json5
+MINOTAUR_PEDAL_RIG ?= rigs/grey-nox.json5
 MINOTAUR_INPUT_DB ?= $(KLON_INPUT_DB)
 MINOTAUR_OUTPUT_DB ?= $(KLON_OUTPUT_DB)
-MINOTAUR_OUTPUT_WAV ?= lab/reports/klon-minotaur/minotaur-pedal-only.wav
-MINOTAUR_METADATA ?= lab/reports/klon-minotaur/minotaur-pedal-only.run.json
+MINOTAUR_OUTPUT_WAV ?= lab/reports/klon-minotaur/grey-nox.wav
+MINOTAUR_METADATA ?= lab/reports/klon-minotaur/grey-nox.run.json
 MINOTAUR_KLON_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5.md
 MINOTAUR_KLON_SWEEP_DIR ?= lab/reports/klon-minotaur/sweep-gain5
 MINOTAUR_KLON_SWEEP_REPORT ?= lab/reports/klon-minotaur/minotaur-vs-klon-gain5-sweep.md
@@ -85,7 +85,7 @@ ANALYTIC_EVAL_REPORT ?= lab/reports/common-cathode-analytic-spice-evaluation.md
 ANALYTIC_STRIDE ?= $(NEURAL_STRIDE)
 INTEGRATED_NEURAL_DIR ?= lab/reports/integrated-neural-first-stage-anchor-current
 INTEGRATED_NEURAL_REPORT ?= lab/reports/integrated-neural-first-stage-anchor-current.md
-INTEGRATED_NEURAL_RIG ?= rigs/nox30-nam-anchor.json5
+INTEGRATED_NEURAL_RIG ?= rigs/grey-nox.json5
 INTEGRATED_NEURAL_IR ?= 0
 INTEGRATED_NEURAL_REFERENCE_WAV ?= lab/reports/nam-diagnostics-ac30hwh-topboost-gain5-brit-noir.wav
 INTEGRATED_NEURAL_SEGMENTS ?= lab/segments/guitar-chords.markers.json
@@ -122,7 +122,7 @@ IR_FLAG = $(if $(filter 0 false no off,$(IR)),,$(if $(filter 1 true yes on,$(IR)
 MONITOR_FLAG = $(if $(filter 1 true yes on,$(MONITOR)),--monitor,)
 OVERWRITE_FLAG = $(if $(filter 1 true yes on,$(OVERWRITE)),--overwrite,)
 RIG_FLAG = $(if $(strip $(RIG)),--rig "$(RIG)",)
-REQUIRE_RIG = $(if $(strip $(RIG)),true,echo "RIG is required, for example: make standalone-run RIG=rigs/nox30-driven.json5" >&2; exit 2)
+REQUIRE_RIG = $(if $(strip $(RIG)),true,echo "RIG is required, for example: make standalone-run RIG=rigs/grey-nox.json5" >&2; exit 2)
 
 build:
 	cargo build --release
@@ -376,7 +376,7 @@ lab-evaluate-neural-cell:
 		--stride "$(NEURAL_STRIDE)" \
 		--split "$(NEURAL_EVAL_SPLIT)"
 
-lab-shadow-nox30-first-stage: RIG = rigs/nox30-driven.json5
+lab-shadow-nox30-first-stage: RIG = rigs/grey-nox.json5
 lab-shadow-nox30-first-stage: INPUT=file
 lab-shadow-nox30-first-stage: OUTPUT=wav
 lab-shadow-nox30-first-stage: MONITOR=1

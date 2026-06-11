@@ -16,6 +16,7 @@ class SignalStats:
     rms_dbfs: float
     peak_dbfs: float
     crest_db: float
+    mean_dbfs: float = -240.0
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class ComparisonMetrics:
     null_relative_db: float
     log_spectral_distance_db: float
     envelope_error_db: float
+    weighted_log_spectral_distance_db: float = 0.0
+    dc_offset_delta_db: float = 0.0
     segments: tuple[SegmentComparisonMetrics, ...] = ()
 
 
@@ -158,6 +161,14 @@ def compare_signals(
         null_relative_db=linear_to_db(residual_rms / max(reference_rms, EPSILON)),
         log_spectral_distance_db=log_spectral_distance(corrected_candidate, aligned_reference, sample_rate_hz),
         envelope_error_db=envelope_error(corrected_candidate, aligned_reference),
+        weighted_log_spectral_distance_db=weighted_log_spectral_distance(
+            corrected_candidate,
+            aligned_reference,
+            sample_rate_hz,
+        ),
+        dc_offset_delta_db=linear_to_db(
+            abs(float(np.mean(corrected_candidate)) - float(np.mean(aligned_reference)))
+        ),
         segments=tuple(
             compare_segment(corrected_candidate, aligned_reference, sample_rate_hz, segment)
             for segment in (segments or [])
@@ -273,6 +284,7 @@ def signal_stats(samples: np.ndarray) -> SignalStats:
         rms_dbfs=linear_to_db(sample_rms),
         peak_dbfs=linear_to_db(sample_peak),
         crest_db=linear_to_db(sample_peak / max(sample_rms, EPSILON)),
+        mean_dbfs=linear_to_db(float(np.mean(samples))) if samples.size else -240.0,
     )
 
 
@@ -285,6 +297,19 @@ def log_spectral_distance(candidate: np.ndarray, reference: np.ndarray, sample_r
     candidate_db = 20.0 * np.log10(np.abs(candidate_stft) + EPSILON)
     reference_db = 20.0 * np.log10(np.abs(reference_stft) + EPSILON)
     return float(np.sqrt(np.mean(np.square(candidate_db - reference_db))))
+
+
+def weighted_log_spectral_distance(candidate: np.ndarray, reference: np.ndarray, sample_rate_hz: int) -> float:
+    if candidate.shape[0] < 32 or reference.shape[0] < 32:
+        return 0.0
+    nperseg = min(4096, max(256, _largest_power_of_two(candidate.shape[0] // 8)))
+    frequencies, _, candidate_stft = signal.stft(candidate, fs=sample_rate_hz, nperseg=nperseg, noverlap=nperseg // 2)
+    _, _, reference_stft = signal.stft(reference, fs=sample_rate_hz, nperseg=nperseg, noverlap=nperseg // 2)
+    candidate_db = 20.0 * np.log10(np.abs(candidate_stft) + EPSILON)
+    reference_db = 20.0 * np.log10(np.abs(reference_stft) + EPSILON)
+    weights = _guitar_audibility_weights(frequencies)
+    squared_error = np.square(candidate_db - reference_db)
+    return float(np.sqrt(np.sum(squared_error * weights[:, np.newaxis]) / max(np.sum(weights) * squared_error.shape[1], EPSILON)))
 
 
 def envelope_error(candidate: np.ndarray, reference: np.ndarray) -> float:
@@ -304,6 +329,18 @@ def rms(samples: np.ndarray) -> float:
 
 def linear_to_db(value: float) -> float:
     return 20.0 * float(np.log10(max(abs(value), EPSILON)))
+
+
+def _guitar_audibility_weights(frequencies_hz: np.ndarray) -> np.ndarray:
+    frequencies = np.asarray(frequencies_hz, dtype=np.float64)
+    weights = np.full(frequencies.shape, 0.35, dtype=np.float64)
+    weights[(frequencies >= 80.0) & (frequencies < 250.0)] = 0.65
+    weights[(frequencies >= 250.0) & (frequencies < 1_000.0)] = 0.95
+    weights[(frequencies >= 1_000.0) & (frequencies < 5_000.0)] = 1.35
+    weights[(frequencies >= 5_000.0) & (frequencies < 8_000.0)] = 1.0
+    weights[(frequencies >= 8_000.0) & (frequencies < 14_000.0)] = 0.55
+    weights[frequencies >= 14_000.0] = 0.25
+    return weights
 
 
 def attack_metrics(candidate: np.ndarray, reference: np.ndarray, sample_rate_hz: int) -> AttackMetrics:

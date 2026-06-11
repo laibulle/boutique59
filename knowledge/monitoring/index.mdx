@@ -8,7 +8,7 @@ The monitor workflow should produce a log and an audio artifact without requirin
 ## Preferred Command
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 This renders the standalone Nox30 path for a bounded duration, writes `greybound-monitor.log`, and writes `target/greybound-nox30-monitor.wav`.
@@ -16,27 +16,27 @@ This renders the standalone Nox30 path for a bounded duration, writes `greybound
 For a shorter verification run:
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-nox30-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-## Fuzz Render
+## Full Board Render
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-This renders the Muffin into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-fuzz-monitor.wav`.
+This renders the full pedal board into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-fuzz-monitor.wav`.
 
-For Muffin into the Nox30 model:
+For a second full-board Nox30 render:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 ## Overdrive Render
 
 ```bash
-target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 This renders the Minotaur into the Nox30 path, writes `greybound-monitor.log`, and writes `target/greybound-overdrive-nox30-monitor.wav`.
@@ -45,9 +45,9 @@ This renders the Minotaur into the Nox30 path, writes `greybound-monitor.log`, a
 
 - `greybound-monitor.log`: text analysis stream used by the log-analysis agent.
 - `target/greybound-nox30-monitor.wav`: mono WAV render at the engine sample rate.
-- `target/greybound-fuzz-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
-- `target/greybound-fuzz-nox30-monitor.wav`: mono WAV render for the Muffin Nox30 rig.
-- `target/greybound-overdrive-nox30-monitor.wav`: mono WAV render for the Minotaur Nox30 rig.
+- `target/greybound-fuzz-monitor.wav`: mono WAV render for the full-board Nox30 rig.
+- `target/greybound-fuzz-nox30-monitor.wav`: mono WAV render for the full-board Nox30 rig.
+- `target/greybound-overdrive-nox30-monitor.wav`: mono WAV render for the Grey Nox rig.
 
 The WAV artifact is useful because it can be inspected later even when the test environment has no audio device.
 
@@ -66,7 +66,7 @@ The audio thread reads knob updates through atomics, so the terminal UI does not
 
 Recent monitor runs with the driven Nox30 configuration showed clean input and zero xruns, but severe output clipping at the selected output level. Treat clipping in this workflow as a model or gain-staging issue until analysis proves otherwise.
 
-A short `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor` run produced a valid mono 48 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
+A short `target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor` run produced a valid mono 48 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
 
 ## Log Analysis
 
@@ -77,3 +77,35 @@ Analyze `greybound-monitor.log` and report:
 - input sanity,
 - suspicious RMS or crest-factor values,
 - concrete next debugging steps.
+
+## WAV Evaluation Gates
+
+For candidate/reference iteration, use `evaluate-wav` when the goal is a quick
+promotion gate rather than a full manual report:
+
+```bash
+uv --project lab run greybound-lab evaluate-wav \
+  --candidate lab/renders/nox30-driven.wav \
+  --reference lab/references/nox30-reference.wav \
+  --segments lab/segments/guitar-chords.markers.json \
+  --profile amp-tone \
+  --report lab/reports/nox30-driven.eval.md \
+  --json lab/reports/nox30-driven.eval.json
+```
+
+Profiles:
+
+- `amp-tone`: full-rig amp/pedal tone matching. It gates clipping, DC offset,
+  gain correction, null residual, log-spectral distance, guitar-weighted
+  log-spectral distance, and envelope error.
+- `clipper`: nonlinear pedal or amp clipping checks. It keeps the common health
+  gates and adds segment gates for harmonic, intermodulation, and high-band
+  aliasing diagnostics when those segment types are present.
+- `regression`: strict previous-vs-candidate comparison. Use it only when test
+  conditions are intentionally identical.
+
+Verdicts are `pass`, `warning`, or `severe`. Treat `severe` as a blocker unless
+the experiment is explicitly meant to trigger that gate, such as intentional
+hard clipping in a clipper stress test. The guitar-weighted spectral metric is
+diagnostic rather than psychoacoustic proof; it gives more influence to the
+musically sensitive guitar bands than the unweighted log-spectral distance.

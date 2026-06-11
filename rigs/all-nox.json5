@@ -1,7 +1,7 @@
 {
   // Rig only: no input device, output device, monitor, or render settings.
-  // Full board reference: every current pedal is present but bypassed.
-  name: "nox30-all-pedals-bypassed",
+  // Full board reference: every current pedal is present before/around the Nox30.
+  name: "all-nox",
 
   chain: {
     cable_capacitance_pf: 470,
@@ -11,7 +11,7 @@
     {
       id: "opto-compressor",
       device: "lumen",
-      bypassed: true,
+      bypassed: false,
       controls: {
         peak_reduction: 0.66,
         gain: 0.52,
@@ -22,7 +22,7 @@
     {
       id: "envelope-filter",
       device: "muon",
-      bypassed: true,
+      bypassed: false,
       controls: {
         sensitivity: 0.64,
         range: 0.68,
@@ -33,7 +33,7 @@
     {
       id: "organic-phaser",
       device: "tron",
-      bypassed: true,
+      bypassed: false,
       controls: {
         rate_hz: 0.68,
         depth: 0.9,
@@ -44,7 +44,7 @@
     {
       id: "bbd-flanger",
       device: "jetstream",
-      bypassed: true,
+      bypassed: false,
       controls: {
         manual: 0.44,
         rate_hz: 0.32,
@@ -56,7 +56,7 @@
     {
       id: "fuzz",
       device: "muffin",
-      bypassed: true,
+      bypassed: false,
       controls: {
         sustain: 0.7,
         tone: 0.46,
@@ -64,9 +64,9 @@
       },
     },
     {
-      id: "transparent-drive",
+      id: "klon-drive",
       device: "minotaur",
-      bypassed: true,
+      bypassed: false,
       controls: {
         gain: 0.42,
         treble: 0.70,
@@ -76,7 +76,7 @@
     {
       id: "dual-drive",
       device: "monarch",
-      bypassed: true,
+      bypassed: false,
       controls: {
         gain: 0.48,
         tone: 0.57,
@@ -86,7 +86,7 @@
     {
       id: "distortion",
       device: "godess-one",
-      bypassed: true,
+      bypassed: false,
       controls: {
         distortion: 0.64,
         tone: 0.47,
@@ -100,7 +100,7 @@
     {
       id: "analog-chorus",
       device: "celeste",
-      bypassed: true,
+      bypassed: false,
       controls: {
         rate_hz: 0.72,
         depth: 0.72,
@@ -111,7 +111,7 @@
     {
       id: "analog-delay",
       device: "brigade",
-      bypassed: true,
+      bypassed: false,
       controls: {
         time_ms: 320.0,
         repeats: 0.46,
@@ -122,7 +122,7 @@
     {
       id: "amp-trem",
       device: "dartford",
-      bypassed: true,
+      bypassed: false,
       controls: {
         rate_hz: 10.2,
         depth: 1.0,
@@ -133,7 +133,7 @@
     {
       id: "spring-reverb",
       device: "springfield",
-      bypassed: true,
+      bypassed: false,
       controls: {
         dwell: 0.48,
         tone: 0.58,

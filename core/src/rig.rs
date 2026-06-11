@@ -395,7 +395,7 @@ mod tests {
             r#"
             {
               // Runtime I/O intentionally does not belong here.
-              name: 'muffin-nox30',
+              name: 'unit-test-rig',
               chain: { cable_capacitance_pf: 470 },
               pre_amp: [{
                 id: 'fuzz',
@@ -415,7 +415,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("muffin-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(chain.amp_model, "nox30");
         assert_eq!(chain.pre_amp.len(), 1);
         assert_eq!(controls.len(), 1);
@@ -427,7 +427,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'nox30-all-pedals-bypassed',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'fuzz',
                 device: 'muffin',
@@ -459,20 +459,41 @@ mod tests {
     }
 
     #[test]
-    fn parses_full_bypassed_pedalboard_fixture() {
-        let rig = RigConfig::from_json5(include_str!("../../rigs/nox30-all-pedals-bypassed.json5"))
-            .unwrap();
+    fn parses_full_pedalboard_fixture() {
+        let rig = RigConfig::from_json5(include_str!("../../rigs/all-nox.json5")).unwrap();
 
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("nox30-all-pedals-bypassed"));
+        assert_eq!(rig.name.as_deref(), Some("all-nox"));
         assert_eq!(chain.pre_amp.len(), 8);
         assert_eq!(chain.fx_loop.len(), 4);
-        assert!(chain.pre_amp.iter().all(|slot| slot.bypassed));
-        assert!(chain.fx_loop.iter().all(|slot| slot.bypassed));
+        assert!(chain.pre_amp.iter().all(|slot| !slot.bypassed));
+        assert!(chain.fx_loop.iter().all(|slot| !slot.bypassed));
         assert_eq!(controls.len(), 12);
-        assert!(controls.iter().all(|slot| slot.bypassed));
+        assert!(controls.iter().all(|slot| !slot.bypassed));
+        assert!(rig.amp_enabled());
+        assert!(rig.cab_ir_enabled());
+    }
+
+    #[test]
+    fn parses_grey_nox_fixture() {
+        let rig = RigConfig::from_json5(include_str!("../../rigs/grey-nox.json5")).unwrap();
+
+        let chain = rig.signal_chain_config().unwrap();
+        let controls = rig.device_controls().unwrap();
+
+        assert_eq!(rig.name.as_deref(), Some("grey-nox"));
+        assert_eq!(
+            chain.pre_amp,
+            vec![DeviceSlotConfig::active(DeviceConfig::Minotaur)]
+        );
+        assert!(chain.fx_loop.is_empty());
+        assert_eq!(controls.len(), 1);
+        assert!(matches!(
+            controls[0].controls,
+            DeviceControls::Minotaur(MinotaurControls { .. })
+        ));
         assert!(rig.amp_enabled());
         assert!(rig.cab_ir_enabled());
     }
@@ -497,7 +518,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'minotaur-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'overdrive',
                 device: 'minotaur',
@@ -512,7 +533,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("minotaur-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Minotaur)]
@@ -534,7 +555,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'lumen-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'opto-compressor',
                 device: 'lumen',
@@ -549,7 +570,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("lumen-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Lumen)]
@@ -573,7 +594,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'muon-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'envelope-filter',
                 device: 'muon',
@@ -588,7 +609,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("muon-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Muon)]
@@ -612,7 +633,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'monarch-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'dual-drive',
                 device: 'monarch',
@@ -627,7 +648,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("monarch-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Monarch)]
@@ -649,7 +670,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'godess-one-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'distortion',
                 device: 'godess-one',
@@ -664,7 +685,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("godess-one-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::GodessOne)]
@@ -687,7 +708,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'dartford-nox30',
+              name: 'unit-test-rig',
               fx_loop: [{
                 id: 'amp-trem',
                 device: 'dartford',
@@ -702,7 +723,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("dartford-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.fx_loop,
             vec![DeviceSlotConfig::active(DeviceConfig::Dartford)]
@@ -725,7 +746,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'springfield-nox30',
+              name: 'unit-test-rig',
               fx_loop: [{
                 id: 'spring-reverb',
                 device: 'springfield',
@@ -740,7 +761,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("springfield-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.fx_loop,
             vec![DeviceSlotConfig::active(DeviceConfig::Springfield)]
@@ -762,7 +783,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'tron-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'organic-phaser',
                 device: 'tron',
@@ -777,7 +798,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("tron-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Tron)]
@@ -801,7 +822,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'jetstream-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'bbd-flanger',
                 device: 'jetstream',
@@ -816,7 +837,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("jetstream-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Jetstream)]
@@ -842,7 +863,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'celeste-nox30',
+              name: 'unit-test-rig',
               pre_amp: [{
                 id: 'analog-chorus',
                 device: 'celeste',
@@ -857,7 +878,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("celeste-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.pre_amp,
             vec![DeviceSlotConfig::active(DeviceConfig::Celeste)]
@@ -881,7 +902,7 @@ mod tests {
         let rig = RigConfig::from_json5(
             r#"
             {
-              name: 'brigade-nox30',
+              name: 'unit-test-rig',
               fx_loop: [{
                 id: 'analog-delay',
                 device: 'brigade',
@@ -896,7 +917,7 @@ mod tests {
         let chain = rig.signal_chain_config().unwrap();
         let controls = rig.device_controls().unwrap();
 
-        assert_eq!(rig.name.as_deref(), Some("brigade-nox30"));
+        assert_eq!(rig.name.as_deref(), Some("unit-test-rig"));
         assert_eq!(
             chain.fx_loop,
             vec![DeviceSlotConfig::active(DeviceConfig::Brigade)]

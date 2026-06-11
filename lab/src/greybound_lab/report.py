@@ -45,19 +45,21 @@ def _render_markdown(
 
 ## Levels
 
-| Signal | RMS dBFS | Peak dBFS | Crest dB |
-| --- | ---: | ---: | ---: |
-| Candidate input | {metrics.candidate.rms_dbfs:.2f} | {metrics.candidate.peak_dbfs:.2f} | {metrics.candidate.crest_db:.2f} |
-| Reference input | {metrics.reference.rms_dbfs:.2f} | {metrics.reference.peak_dbfs:.2f} | {metrics.reference.crest_db:.2f} |
-| Candidate aligned | {metrics.aligned_candidate.rms_dbfs:.2f} | {metrics.aligned_candidate.peak_dbfs:.2f} | {metrics.aligned_candidate.crest_db:.2f} |
-| Reference aligned | {metrics.aligned_reference.rms_dbfs:.2f} | {metrics.aligned_reference.peak_dbfs:.2f} | {metrics.aligned_reference.crest_db:.2f} |
+| Signal | RMS dBFS | Peak dBFS | Crest dB | DC mean dBFS |
+| --- | ---: | ---: | ---: | ---: |
+| Candidate input | {metrics.candidate.rms_dbfs:.2f} | {metrics.candidate.peak_dbfs:.2f} | {metrics.candidate.crest_db:.2f} | {metrics.candidate.mean_dbfs:.2f} |
+| Reference input | {metrics.reference.rms_dbfs:.2f} | {metrics.reference.peak_dbfs:.2f} | {metrics.reference.crest_db:.2f} | {metrics.reference.mean_dbfs:.2f} |
+| Candidate aligned | {metrics.aligned_candidate.rms_dbfs:.2f} | {metrics.aligned_candidate.peak_dbfs:.2f} | {metrics.aligned_candidate.crest_db:.2f} | {metrics.aligned_candidate.mean_dbfs:.2f} |
+| Reference aligned | {metrics.aligned_reference.rms_dbfs:.2f} | {metrics.aligned_reference.peak_dbfs:.2f} | {metrics.aligned_reference.crest_db:.2f} | {metrics.aligned_reference.mean_dbfs:.2f} |
 
 ## Error Metrics
 
 - Null residual RMS: {metrics.null_rms_dbfs:.2f} dBFS
 - Null residual relative to reference: {metrics.null_relative_db:.2f} dB
 - Log-spectral distance: {metrics.log_spectral_distance_db:.2f} dB
+- Weighted guitar-band log-spectral distance: {metrics.weighted_log_spectral_distance_db:.2f} dB
 - Envelope error: {metrics.envelope_error_db:.2f} dB
+- Aligned DC offset delta: {metrics.dc_offset_delta_db:.2f} dBFS
 
 {_render_segments(metrics.segments)}
 

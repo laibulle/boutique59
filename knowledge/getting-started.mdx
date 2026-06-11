@@ -50,46 +50,46 @@ npm run dev -- --hostname 127.0.0.1 --port 3001
 
 Rigs are JSON5 files in `rigs/`. They describe the musical rig only: amp, pedals, order, and controls. Runtime choices such as audio devices, monitor logging, sample rate, and WAV paths stay in CLI parameters.
 
-Live guitar input to the configured output device:
+Live guitar input to the full board:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-Dry WAV input to the configured output device:
+Dry WAV input to the full board:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --device 'DEVICE NAME' --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --device 'DEVICE NAME' --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-Dry WAV input rendered to a WAV file:
+Full-board dry WAV input rendered to a WAV file:
 
 ```bash
-target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-Minotaur overdrive rendered to a WAV file:
+Grey-box Klon/Nox rendered to a WAV file:
 
 ```bash
-target/release/greybound-cli --rig rigs/minotaur-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-overdrive-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-Godess One distortion rendered to a WAV file:
+Full board rendered to a WAV file:
 
 ```bash
-target/release/greybound-cli --rig rigs/godess-one-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-godess-one-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-godess-one-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
-Dartford in the Nox30 FX loop rendered to a WAV file:
+Full board with FX loop devices rendered to a WAV file:
 
 ```bash
-target/release/greybound-cli --rig rigs/dartford-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-dartford-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/all-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-dartford-nox30-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 Null output is useful when only the monitor log matters:
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --null-output --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --null-output --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 ## Runtime Parameters
@@ -97,7 +97,7 @@ target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav "lab/refe
 Generic live run:
 
 ```bash
-target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig rigs/grey-nox.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
 Main parameters:

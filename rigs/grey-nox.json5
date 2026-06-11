@@ -1,6 +1,7 @@
 {
   // Rig only: no input device, output device, monitor, or render settings.
-  name: "celeste-nox30",
+  // Grey-box reference rig: Klon/Minotaur into Nox30.
+  name: "grey-nox",
 
   chain: {
     cable_capacitance_pf: 470,
@@ -8,14 +9,13 @@
 
   pre_amp: [
     {
-      id: "analog-chorus",
-      device: "celeste",
+      id: "klon-drive",
+      device: "minotaur",
       bypassed: false,
       controls: {
-        rate_hz: 0.72,
-        depth: 0.72,
-        tone: 0.58,
-        mix: 0.48,
+        gain: 0.42,
+        treble: 0.70,
+        output: 0.42,
       },
     },
   ],
@@ -24,13 +24,13 @@
     model: "nox30",
     bypassed: false,
     controls: {
-      volume: 0.52,
-      bass: 0.52,
-      treble: 0.62,
-      cut: 0.42,
-      drive: 0.12,
-      presence: 0.34,
-      sag: 0.42,
+      volume: 0.58,
+      bass: 0.54,
+      treble: 0.59,
+      cut: 0.43,
+      drive: 0.20,
+      presence: 0.35,
+      sag: 0.45,
     },
   },
 

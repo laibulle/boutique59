@@ -151,6 +151,30 @@ def test_band_residual_metrics_find_affected_band() -> None:
     assert segment.band_residual.mid_db > segment.band_residual.presence_db
 
 
+def test_weighted_spectral_distance_emphasizes_guitar_presence_band() -> None:
+    sample_rate = 48_000
+    time = np.arange(sample_rate, dtype=np.float64) / sample_rate
+    reference = np.sin(2.0 * np.pi * 500.0 * time)
+    low_error = reference + 0.05 * np.sin(2.0 * np.pi * 60.0 * time)
+    presence_error = reference + 0.05 * np.sin(2.0 * np.pi * 3_000.0 * time)
+
+    low_metrics = compare_signals(low_error, reference, sample_rate)
+    presence_metrics = compare_signals(presence_error, reference, sample_rate)
+
+    assert presence_metrics.weighted_log_spectral_distance_db > low_metrics.weighted_log_spectral_distance_db
+
+
+def test_dc_offset_metrics_are_reported() -> None:
+    sample_rate = 48_000
+    reference = _sine(sample_rate, 0.5)
+    candidate = reference + 0.01
+
+    metrics = compare_signals(candidate, reference, sample_rate)
+
+    assert metrics.candidate.mean_dbfs > -50.0
+    assert metrics.dc_offset_delta_db > -50.0
+
+
 def _sine(sample_rate: int, seconds: float) -> np.ndarray:
     time = np.arange(int(sample_rate * seconds), dtype=np.float64) / sample_rate
     return np.sin(2.0 * np.pi * 997.0 * time)

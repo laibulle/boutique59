@@ -32,7 +32,7 @@ Render a Greybound rig into the lab with reproducible metadata:
 
 ```sh
 uv --project lab run greybound-lab render-rig \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav lab/renders/nox30-driven.wav \
   --metadata lab/renders/nox30-driven.run.json \
@@ -156,7 +156,7 @@ Direct CLI form:
 
 ```sh
 target/release/greybound-cli \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
   --output-wav target/greybound-nox30-monitor.wav \
   --render-seconds 20 \
@@ -209,7 +209,7 @@ sides.
 
 ```sh
 uv --project lab run greybound-lab sweep-rig-vs-reference \
-  --rig rigs/nox30-driven.json5 \
+  --rig rigs/grey-nox.json5 \
   --sweep volume=0.64,0.76,0.88 \
   --sweep drive=0.68,0.80,0.92 \
   --sweep sag=0.55,0.70 \

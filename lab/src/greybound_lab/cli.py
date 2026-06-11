@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from greybound_lab.audio import read_wav_mono
+from greybound_lab.evaluation import evaluate_metrics, write_evaluation_json, write_evaluation_report
 from greybound_lab.external_inputs import download_tone3000_inputs, download_tone3000_irs
 from greybound_lab.graybox_cell import fit_common_cathode_graybox
 from greybound_lab.integrated_neural import evaluate_integrated_neural_cell
@@ -33,6 +34,19 @@ def main() -> None:
     compare.add_argument("--metadata", type=Path)
     compare.add_argument("--segments", type=Path)
     compare.add_argument("--max-lag-ms", type=float, default=100.0)
+
+    evaluate = subparsers.add_parser(
+        "evaluate-wav",
+        help="Compare a candidate WAV against a reference WAV and apply profile-specific quality gates.",
+    )
+    evaluate.add_argument("--candidate", required=True, type=Path)
+    evaluate.add_argument("--reference", required=True, type=Path)
+    evaluate.add_argument("--report", required=True, type=Path)
+    evaluate.add_argument("--json", type=Path)
+    evaluate.add_argument("--metadata", type=Path)
+    evaluate.add_argument("--segments", type=Path)
+    evaluate.add_argument("--max-lag-ms", type=float, default=100.0)
+    evaluate.add_argument("--profile", choices=["amp-tone", "clipper", "regression"], default="amp-tone")
 
     render = subparsers.add_parser("render-rig", help="Render a Greybound rig to WAV and write lab metadata.")
     render.add_argument("--rig", required=True, type=Path)
@@ -117,7 +131,7 @@ def main() -> None:
     integrated_cell.add_argument("--descriptor", type=Path)
     integrated_cell.add_argument("--graybox-config", type=Path)
     integrated_cell.add_argument("--component", default="nox30.first_stage")
-    integrated_cell.add_argument("--rig", type=Path, default=Path("rigs/nox30-driven.json5"))
+    integrated_cell.add_argument("--rig", type=Path, default=Path("rigs/grey-nox.json5"))
     integrated_cell.add_argument("--input-wav", type=Path, default=Path("lab/references/tone3000-inputs/Brit - Guitar.wav"))
     integrated_cell.add_argument("--binary", type=Path, default=Path("target/release/greybound-cli"))
     integrated_cell.add_argument(
@@ -234,6 +248,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
+    elif args.command == "evaluate-wav":
+        run_evaluate_wav(args)
     elif args.command == "render-rig":
         run_render_rig(args)
     elif args.command == "generate-stimuli":
@@ -291,6 +307,37 @@ def run_compare_wav(args: argparse.Namespace) -> None:
         metadata_path=args.metadata,
     )
     print(f"wrote {args.report}")
+
+
+def run_evaluate_wav(args: argparse.Namespace) -> None:
+    candidate = read_wav_mono(args.candidate)
+    reference = read_wav_mono(args.reference)
+    if candidate.sample_rate != reference.sample_rate:
+        raise SystemExit(
+            f"sample-rate mismatch: candidate={candidate.sample_rate} Hz, "
+            f"reference={reference.sample_rate} Hz"
+        )
+    metrics = compare_signals(
+        candidate.samples,
+        reference.samples,
+        candidate.sample_rate,
+        max_lag_ms=args.max_lag_ms,
+        segments=load_segments(args.segments) if args.segments else None,
+    )
+    result = evaluate_metrics(metrics, candidate.samples, profile=args.profile)
+    write_evaluation_report(
+        args.report,
+        candidate_path=candidate.path,
+        reference_path=reference.path,
+        metrics=metrics,
+        result=result,
+        metadata_path=args.metadata,
+    )
+    if args.json:
+        write_evaluation_json(args.json, metrics=metrics, result=result)
+        print(f"wrote {args.json}")
+    print(f"wrote {args.report}")
+    print(f"verdict {result.verdict}")
 
 
 def run_render_rig(args: argparse.Namespace) -> None:

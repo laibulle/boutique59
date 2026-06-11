@@ -522,9 +522,12 @@ mod tests {
         );
         assert_eq!(
             chain.fx_loop,
-            vec![DeviceSlotConfig::active(DeviceConfig::Springfield)]
+            vec![
+                DeviceSlotConfig::active(DeviceConfig::Springfield),
+                DeviceSlotConfig::active(DeviceConfig::StudioVerb),
+            ]
         );
-        assert_eq!(controls.len(), 2);
+        assert_eq!(controls.len(), 3);
         assert!(matches!(
             controls[0].controls,
             DeviceControls::Minotaur(MinotaurControls { .. })
@@ -532,6 +535,10 @@ mod tests {
         assert!(matches!(
             controls[1].controls,
             DeviceControls::Springfield(SpringfieldControls { .. })
+        ));
+        assert!(matches!(
+            controls[2].controls,
+            DeviceControls::StudioVerb(StudioVerbControls { .. })
         ));
         assert!(rig.amp_enabled());
         assert!(rig.cab_ir_enabled());

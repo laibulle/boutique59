@@ -5,15 +5,15 @@ description: Original digital room/plate reverb model for Greybound.
 
 StudioVerb is Greybound's original digital reverb pedal. It is not a clone and
 not a graybox circuit model. The target is a practical studio-style reverb with
-multiple algorithms that can sit after delay/spring in `all-nox`.
+multiple algorithms that can sit after delay/spring in maintained rigs.
 
 ## Intended Role
 
 - `room`: shorter, denser ambience for general use.
 - `plate`: longer and smoother synthetic tail with less early-room emphasis.
 - Default placement is `fx_loop` or `post_amp`.
-- It belongs in `all-nox`; do not treat it as a real graybox reference for
-  `grey-nox`.
+- It belongs in `all-nox` and may be used in `grey-nox` as a creative room
+  layer, but do not treat it as a real graybox reference.
 
 ## Controls
 
@@ -55,6 +55,7 @@ Code integration:
 - CLI/TUI display and runtime numeric control updates,
 - WebUI preset metadata,
 - `rigs/all-nox.json5` FX-loop placement after Springfield.
+- `rigs/grey-nox.json5` optional low-mix room layer after Springfield.
 
 Validation:
 
@@ -81,6 +82,11 @@ Evidence:
 - `all-nox` monitor render produced zero xruns, but the full-board output still
   clips heavily because every pedal is active. Treat that as the known all-board
   gain-staging problem, not as isolated StudioVerb instability.
+- `grey-nox` now includes StudioVerb after Springfield with a conservative
+  `mix = 0.10`. A 10-second monitor render to
+  `target/greybound-grey-nox-studioverb-monitor.wav` produced zero xruns, zero
+  near-clips, and zero hard clips; observed output RMS stayed around
+  `-15` to `-18 dBFS`, with peaks below `-4.3 dBFS`.
 
 ## Open Work
 

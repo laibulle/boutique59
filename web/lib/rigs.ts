@@ -147,6 +147,17 @@ export const rigPresets: RigPreset[] = [
     pedals: [
       pedal("minotaur", "pre", { gain: 0.42, treble: 0.70, output: 0.42 }),
       pedal("springfield", "fx", { dwell: 0.48, tone: 0.58, mix: 0.26 }),
+      pedal("studioverb", "fx", {
+        algorithm: "room",
+        decay: 0.42,
+        size: 0.46,
+        pre_delay_ms: 12.0,
+        diffusion: 0.64,
+        tone: 0.54,
+        low_cut: 0.40,
+        mod_depth: 0.16,
+        mix: 0.10,
+      }),
     ],
     amp: { volume: 0.58, bass: 0.54, treble: 0.59, cut: 0.43, drive: 0.20, presence: 0.35, sag: 0.45 },
   }),
